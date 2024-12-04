@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 头像居中显示样式 */
+.avatar-container {
+  @apply flex justify-center items-center;
+}
+
+.avatar {
+  @apply w-24 h-24 rounded-full object-cover;
+  @apply border-4 border-gray-200;
+}
+
+/* Font Awesome 图标样式 */
+.fa-icon {
+  @apply w-6 h-6 inline-block;
+  @apply transition-colors duration-200;
+}
+
+/* 图标容器样式 */
+.icon-container {
+  @apply flex items-center gap-2;
+}
+
+/* 图标悬停效果 */
+.fa-icon:hover {
+  @apply text-blue-500;
+}
+
+/* 您的自定义样式可以放在这里 */
