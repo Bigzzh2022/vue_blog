@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { CalendarOutline, EyeOutline, FolderOutline } from '@vicons/ionicons5'
@@ -172,7 +172,7 @@ const fullNameExample = computed(() => {
 TypeScript能够显著提升Vue3项目的开发体验和代码质量，但需要遵循一些最佳实践才能充分发挥其优势。
 
 ## 参考资料
-
+   <a href="https://example.com" v-safe-link>外部链接</a>
 1. [Vue3官方文档](https://vuejs.org/)
 2. [TypeScript官方文档](https://www.typescriptlang.org/)
 3. [Vue3 + TypeScript最佳实践指南](https://example.com)`,
@@ -215,10 +215,48 @@ watch(() => route.params.id, async (newId) => {
   }
 }, { immediate: true })
 
+// 检查链接是否为外部链接
+const isExternalLink = (href: string): boolean => {
+  // 如果是以http://或https://开头的链接，并且不是指向当前域名
+  return /^https?:\/\//.test(href) && !href.includes(window.location.hostname)
+}
+
+// 处理文章中的外部链接
+const processExternalLinks = () => {
+  // 等待DOM更新后处理链接
+  nextTick(() => {
+    // 获取文章内容中的所有链接
+    const articleLinks = document.querySelectorAll('.article-content a[href]')
+    
+    articleLinks.forEach(link => {
+      const anchorElement = link as HTMLAnchorElement
+      const href = anchorElement.getAttribute('href')
+      if (href && isExternalLink(href)) {
+        // 添加v-safe-link属性标记
+        anchorElement.setAttribute('v-safe-link', '')
+        
+        // 添加点击事件处理
+        anchorElement.addEventListener('click', (e: MouseEvent) => {
+          e.preventDefault()
+          // 获取链接URL
+          const url = anchorElement.getAttribute('href') || ''
+          // 触发安全链接提示
+          window.dispatchEvent(new CustomEvent('external-link-click', { 
+            detail: { url } 
+          }))
+        })
+      }
+    })
+  })
+}
+
 onMounted(() => {
   // 假设这里从API获取文章数据
   const articleTitle = '在Vue3中使用TypeScript的最佳实践'
   articleStore.setTitle(articleTitle)
+  
+  // 处理文章中的外部链接
+  processExternalLinks()
 })
 
 onUnmounted(() => {
@@ -252,6 +290,12 @@ watch(() => article.value.title, (newTitle) => {
     articleStore.setTitle(newTitle)
   }
 }, { immediate: true })
+
+// 监听文章数据变化
+watch(() => article.value.content, () => {
+  // 当文章内容变化时，重新处理外部链接
+  processExternalLinks()
+})
 
 // 组件卸载时清除标题
 onUnmounted(() => {

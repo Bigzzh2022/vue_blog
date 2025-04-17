@@ -11,6 +11,15 @@
       <p class="section-desc">链接成就价值，分享创造精彩</p>
     </div>
 
+    <!-- 统计信息 -->
+    <div class="stats-row">
+      <NStat label="友链总数" tabular-nums>
+        <template #value>
+          <span class="stat-value">{{ linkStore.approvedLinks.length }}</span>
+        </template>
+      </NStat>
+    </div>
+
     <!-- 申请说明 -->
     <div class="apply-info">
       <NAlert type="info" class="apply-alert">
@@ -97,10 +106,6 @@
           />
         </NFormItem>
 
-        <NFormItem label="状态" path="status">
-          <NSelect v-model:value="formValue.status" :options="statusOptions" />
-        </NFormItem>
-
         <NFormItem>
           <NButton type="primary" @click="handleSubmit" :loading="submitting">
             提交申请
@@ -112,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { 
   NCard, 
   NSpace, 
@@ -125,22 +130,23 @@ import {
   NSelect,
   useMessage
 } from 'naive-ui'
+import NStat from '@/components/NStat.vue'
 import type { FormInst } from 'naive-ui'
 import { TeamOutlined, LinkOutlined } from '@vicons/antd'
 import { InformationOutline } from '@vicons/ionicons5'
-
-interface Friend {
-  id: number
-  name: string
-  url: string
-  icon: string
-  description: string
-  status: string
-}
+import { useLinkStore, type FriendLink } from '@/stores/links'
 
 const message = useMessage()
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
+const linkStore = useLinkStore()
+
+// 加载友链数据
+onMounted(async () => {
+  if (!linkStore.loaded) {
+    await linkStore.loadLinks()
+  }
+})
 
 // 表单数据
 const formValue = ref({
@@ -150,13 +156,6 @@ const formValue = ref({
   description: '',
   status: 'pending'
 })
-
-// 添加状态选项
-const statusOptions = [
-  { label: '待审核', value: 'pending' },
-  { label: '已通过', value: 'approved' },
-  { label: '已拒绝', value: 'rejected' }
-]
 
 // 表单验证规则
 const rules = {
@@ -198,33 +197,8 @@ const rules = {
   }
 }
 
-// 模拟友链数据
-const friends = ref<Friend[]>([
-  {
-    id: 1,
-    name: '示例博客',
-    url: 'https://example.com',
-    icon: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix',
-    description: '这是一个示例博客',
-    status: 'approved'
-  },
-  {
-    id: 2,
-    name: '小明的博客',
-    url: 'https://example.com',
-    icon: 'https://api.dicebear.com/7.x/adventurer/svg?seed=John',
-    description: '记录生活，分享技术',
-    status: 'approved'
-  },
-  {
-    id: 3,
-    name: '小红的空间',
-    url: 'https://example.com',
-    icon: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Lucy',
-    description: '分享是一种快乐',
-    status: 'approved'
-  }
-])
+// 获取已批准的友链
+const friends = computed(() => linkStore.approvedLinks)
 
 // 处理图片加载错误
 const handleImageError = (e: Event) => {
@@ -238,16 +212,26 @@ const handleSubmit = () => {
     if (!errors) {
       submitting.value = true
       try {
-        // 模拟提交
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        message.success('申请已提交，请等待审核')
-        // 重置表单
-        formValue.value = {
-          name: '',
-          url: '',
-          icon: '',
-          description: '',
-          status: 'pending'  // 重置为待审核状态
+        const result = await linkStore.addLink({
+          name: formValue.value.name,
+          url: formValue.value.url,
+          icon: formValue.value.icon,
+          description: formValue.value.description,
+          status: 'pending'
+        })
+        
+        if (result) {
+          message.success('申请已提交，请等待审核')
+          // 重置表单
+          formValue.value = {
+            name: '',
+            url: '',
+            icon: '',
+            description: '',
+            status: 'pending'
+          }
+        } else {
+          message.error('提交失败，请稍后重试')
         }
       } catch (error) {
         message.error('提交失败，请稍后重试')
@@ -289,6 +273,19 @@ const handleSubmit = () => {
 .section-desc {
   color: #666;
   font-size: 16px;
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #18a058;
 }
 
 .apply-info {
@@ -364,7 +361,7 @@ const handleSubmit = () => {
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  display: box;
+  display: flex;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;

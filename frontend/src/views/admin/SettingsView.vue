@@ -39,6 +39,64 @@
             </NUpload>
           </NFormItem>
           
+          <NFormItem label="轮播图设置" path="carouselConfig">
+            <div class="carousel-config">
+              <NSwitch v-model:value="basicForm.carouselEnabled" />
+              <span class="switch-label">{{ basicForm.carouselEnabled ? '启用' : '禁用' }}轮播图</span>
+            </div>
+            
+            <div v-if="basicForm.carouselEnabled" class="mt-3">
+              <NFormItem label="API地址" path="carouselApiUrl">
+                <NInput 
+                  v-model:value="basicForm.carouselApiUrl" 
+                  placeholder="请输入图片API地址"
+                />
+              </NFormItem>
+              
+              <NFormItem label="图片数量" path="carouselImageCount">
+                <NInputNumber 
+                  v-model:value="basicForm.carouselImageCount" 
+                  :min="1" 
+                  :max="10"
+                />
+              </NFormItem>
+              
+              <NFormItem label="切换间隔(秒)" path="carouselInterval">
+                <NInputNumber 
+                  v-model:value="basicForm.carouselInterval" 
+                  :min="2" 
+                  :max="10"
+                  :step="0.5"
+                />
+              </NFormItem>
+            </div>
+          </NFormItem>
+          
+          <NFormItem label="备案号" path="icp">
+            <NInput v-model:value="basicForm.icp" placeholder="请输入备案号" />
+          </NFormItem>
+          
+          <NFormItem label="建站年份" path="startYear">
+            <NInputNumber v-model:value="basicForm.startYear" :min="2000" :max="2099" />
+          </NFormItem>
+          
+          <NFormItem label="底部文本" path="footerText">
+            <NInput v-model:value="basicForm.footerText" placeholder="请输入底部文本" />
+          </NFormItem>
+          
+          <NFormItem label="底部链接" path="footerLinks">
+            <NDynamicInput
+              v-model:value="basicForm.footerLinks"
+              :on-create="() => ({ name: '', url: '' })"
+              #="{ value }"
+            >
+              <NSpace vertical>
+                <NInput v-model:value="value.name" placeholder="链接名称" />
+                <NInput v-model:value="value.url" placeholder="链接地址" />
+              </NSpace>
+            </NDynamicInput>
+          </NFormItem>
+          
           <NFormItem label="每页文章数" path="postsPerPage">
             <NInputNumber 
               v-model:value="basicForm.postsPerPage" 
@@ -112,12 +170,101 @@
               <NSpace vertical>
                 <NInput v-model:value="value.name" placeholder="平台名称" />
                 <NInput v-model:value="value.url" placeholder="链接地址" />
+                <NSelect
+                  v-model:value="value.icon"
+                  :options="iconOptions"
+                  placeholder="选择图标"
+                />
               </NSpace>
             </NDynamicInput>
           </NFormItem>
           
           <NFormItem>
             <NButton type="primary" @click="handleProfileSubmit">保存资料</NButton>
+          </NFormItem>
+        </NForm>
+      </NTabPane>
+      
+      <!-- 高级设置 -->
+      <NTabPane name="advanced" tab="高级设置">
+        <NForm
+          ref="advancedFormRef"
+          :model="advancedForm"
+          label-placement="left"
+          label-width="100"
+          require-mark-placement="right-hanging"
+        >
+          <h3 class="setting-section-title">统计分析</h3>
+          <NFormItem label="启用统计" path="analytics.enabled">
+            <NSwitch v-model:value="advancedForm.analytics.enabled" />
+          </NFormItem>
+          
+          <div v-if="advancedForm.analytics.enabled">
+            <NFormItem label="统计类型" path="analytics.type">
+              <NSelect
+                v-model:value="advancedForm.analytics.type"
+                :options="analyticsOptions"
+              />
+            </NFormItem>
+            
+            <NFormItem label="统计ID" path="analytics.id">
+              <NInput v-model:value="advancedForm.analytics.id" placeholder="请输入统计ID" />
+            </NFormItem>
+            
+            <NFormItem v-if="advancedForm.analytics.type === 'custom'" label="自定义脚本" path="analytics.script">
+              <NInput 
+                v-model:value="advancedForm.analytics.script" 
+                type="textarea" 
+                placeholder="请输入统计脚本"
+              />
+            </NFormItem>
+          </div>
+          
+          <h3 class="setting-section-title">SEO设置</h3>
+          <NFormItem label="关键词" path="seo.keywords">
+            <NInput v-model:value="advancedForm.seo.keywords" placeholder="请输入网站关键词，用逗号分隔" />
+          </NFormItem>
+          
+          <NFormItem label="描述" path="seo.description">
+            <NInput 
+              v-model:value="advancedForm.seo.description" 
+              type="textarea"
+              placeholder="请输入网站描述" 
+            />
+          </NFormItem>
+          
+          <NFormItem label="Robots" path="seo.robots">
+            <NInput v-model:value="advancedForm.seo.robots" placeholder="例如：index,follow" />
+          </NFormItem>
+          
+          <h3 class="setting-section-title">CDN设置</h3>
+          <NFormItem label="启用CDN" path="cdn.enabled">
+            <NSwitch v-model:value="advancedForm.cdn.enabled" />
+          </NFormItem>
+          
+          <NFormItem v-if="advancedForm.cdn.enabled" label="CDN地址" path="cdn.url">
+            <NInput v-model:value="advancedForm.cdn.url" placeholder="请输入CDN地址" />
+          </NFormItem>
+          
+          <h3 class="setting-section-title">自定义代码</h3>
+          <NFormItem label="头部代码" path="customHead">
+            <NInput 
+              v-model:value="advancedForm.customHead" 
+              type="textarea" 
+              placeholder="将被插入到<head>标签内"
+            />
+          </NFormItem>
+          
+          <NFormItem label="底部代码" path="customFooter">
+            <NInput 
+              v-model:value="advancedForm.customFooter" 
+              type="textarea" 
+              placeholder="将被插入到</body>标签前"
+            />
+          </NFormItem>
+          
+          <NFormItem>
+            <NButton type="primary" @click="handleAdvancedSubmit">保存设置</NButton>
           </NFormItem>
         </NForm>
       </NTabPane>
@@ -169,7 +316,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { 
   NTabs, 
   NTabPane,
@@ -183,9 +330,11 @@ import {
   NDynamicInput,
   NSpace,
   useMessage,
-  type UploadFileInfo
+  type UploadFileInfo,
+  NSwitch
 } from 'naive-ui'
 import type { FormInst } from 'naive-ui'
+import { useSettingsStore } from '@/stores/settings'
 
 const message = useMessage()
 
@@ -196,7 +345,15 @@ const basicForm = ref({
   siteDescription: '',
   siteLogo: '',
   postsPerPage: 10,
-  theme: 'light'
+  theme: 'light',
+  carouselEnabled: false,
+  carouselApiUrl: '',
+  carouselImageCount: 5,
+  carouselInterval: 5,
+  icp: '',
+  startYear: new Date().getFullYear(),
+  footerText: '',
+  footerLinks: [] as Array<{ name: string; url: string }>
 })
 
 const themeOptions = [
@@ -204,6 +361,26 @@ const themeOptions = [
   { label: '深色主题', value: 'dark' },
   { label: '跟随系统', value: 'auto' }
 ]
+
+// 从设置存储加载设置
+const settingsStore = useSettingsStore()
+
+onMounted(() => {
+  // 从存储加载设置
+  settingsStore.loadSettingsFromStorage()
+  
+  // 加载基本设置
+  const settings = settingsStore.getBasicSettings()
+  basicForm.value = { ...basicForm.value, ...settings }
+  
+  // 加载个人资料设置
+  const profile = settingsStore.getProfileSettings()
+  profileForm.value = { ...profileForm.value, ...profile }
+  
+  // 加载高级设置
+  const advanced = settingsStore.getAdvancedSettings()
+  advancedForm.value = { ...advancedForm.value, ...advanced }
+})
 
 const basicRules = {
   siteTitle: {
@@ -225,8 +402,25 @@ const profileForm = ref({
   nickname: '',
   bio: '',
   email: '',
-  socialLinks: [] as { name: string; url: string }[]
+  socialLinks: [] as Array<{ name: string; url: string; icon: string }>
 })
+
+// 社交媒体图标选项
+const iconOptions = [
+  { label: '微信', value: 'wechat' },
+  { label: 'GitHub', value: 'github' },
+  { label: '哔哩哔哩', value: 'bilibili' },
+  { label: '知乎', value: 'zhihu' },
+  { label: '微博', value: 'weibo' },
+  { label: 'QQ', value: 'qq' },
+  { label: '邮箱', value: 'email' },
+  { label: '推特', value: 'twitter' },
+  { label: 'Facebook', value: 'facebook' },
+  { label: 'Instagram', value: 'instagram' },
+  { label: 'YouTube', value: 'youtube' },
+  { label: '掘金', value: 'juejin' },
+  { label: 'Linkedin', value: 'linkedin' }
+]
 
 const profileRules = {
   nickname: {
@@ -247,6 +441,36 @@ const profileRules = {
     }
   }
 }
+
+// 高级设置表单
+const advancedFormRef = ref<FormInst | null>(null)
+const advancedForm = ref({
+  analytics: {
+    enabled: false,
+    type: 'google',
+    id: '',
+    script: ''
+  },
+  customHead: '',
+  customFooter: '',
+  seo: {
+    keywords: '',
+    description: '',
+    robots: 'index,follow'
+  },
+  cdn: {
+    enabled: false,
+    url: ''
+  }
+})
+
+// 统计分析类型选项
+const analyticsOptions = [
+  { label: 'Google Analytics', value: 'google' },
+  { label: '百度统计', value: 'baidu' },
+  { label: 'CNZZ统计', value: 'cnzz' },
+  { label: '自定义统计', value: 'custom' }
+]
 
 // 安全设置表单
 const securityFormRef = ref<FormInst | null>(null)
@@ -286,57 +510,79 @@ const securityRules = {
   }
 }
 
-// 处理Logo上传
-const handleLogoUpload = ({ file }: { file: UploadFileInfo }) => {
-  console.log('Logo upload:', file)
-  // 实际项目中这里需要处理文件上传
-  basicForm.value.siteLogo = URL.createObjectURL(file.file as File)
-  message.success('Logo上传成功')
-}
-
 // 处理头像上传
-const handleAvatarUpload = ({ file }: { file: UploadFileInfo }) => {
-  console.log('Avatar upload:', file)
-  // 实际项目中这里需要处理文件上传
-  profileForm.value.avatar = URL.createObjectURL(file.file as File)
-  message.success('头像上传成功')
+const handleAvatarUpload = (options: { file: UploadFileInfo, fileList: UploadFileInfo[] }) => {
+  if (options.file.url) {
+    profileForm.value.avatar = options.file.url
+  }
 }
 
-// 创建社交链接
+// 处理Logo上传
+const handleLogoUpload = (options: { file: UploadFileInfo, fileList: UploadFileInfo[] }) => {
+  if (options.file.url) {
+    basicForm.value.siteLogo = options.file.url
+  }
+}
+
+// 创建社交链接项
 const onCreateSocialLink = () => {
   return {
     name: '',
-    url: ''
+    url: '',
+    icon: 'github'
   }
 }
 
 // 提交基本设置
 const handleBasicSubmit = () => {
-  basicFormRef.value?.validate((errors) => {
+  basicFormRef.value?.validate(async (errors) => {
     if (!errors) {
-      console.log('Basic settings:', basicForm.value)
-      message.success('基本设置已保存')
+      try {
+        await settingsStore.saveBasicSettings(basicForm.value)
+        message.success('基本设置保存成功')
+      } catch (error) {
+        message.error('保存设置失败')
+      }
     }
   })
 }
 
-// 提交个人资料
+// 提交个人资料设置
 const handleProfileSubmit = () => {
-  profileFormRef.value?.validate((errors) => {
+  profileFormRef.value?.validate(async (errors) => {
     if (!errors) {
-      console.log('Profile:', profileForm.value)
-      message.success('个人资料已保存')
+      try {
+        await settingsStore.saveProfileSettings(profileForm.value)
+        message.success('个人资料保存成功')
+      } catch (error) {
+        message.error('保存资料失败')
+      }
     }
   })
+}
+
+// 提交高级设置
+const handleAdvancedSubmit = () => {
+  try {
+    settingsStore.saveAdvancedSettings(advancedForm.value)
+    message.success('高级设置保存成功')
+  } catch (error) {
+    message.error('保存设置失败')
+  }
 }
 
 // 提交安全设置
 const handleSecuritySubmit = () => {
   securityFormRef.value?.validate((errors) => {
     if (!errors) {
-      console.log('Security:', securityForm.value)
-      message.success('密码已修改')
-      // 清空表单
+      // 检查确认密码是否匹配
+      if (securityForm.value.newPassword !== securityForm.value.confirmPassword) {
+        message.error('两次输入的密码不一致')
+        return
+      }
+      
+      // 模拟修改密码请求
+      message.success('密码修改成功')
       securityForm.value = {
         oldPassword: '',
         newPassword: '',
@@ -384,5 +630,24 @@ const handleSecuritySubmit = () => {
 
 :deep(.n-tab-pane) {
   padding: 24px 0;
+}
+
+.carousel-config {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.switch-label {
+  margin-left: 8px;
+}
+
+.setting-section-title {
+  font-size: 18px;
+  color: #333;
+  margin-top: 30px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
 }
 </style> 

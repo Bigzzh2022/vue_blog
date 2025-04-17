@@ -9,6 +9,7 @@ import { fab } from '@fortawesome/free-brands-svg-icons'
 import { far } from '@fortawesome/free-regular-svg-icons'
 import router from './router'
 import App from './App.vue'
+import { registerSafeLink } from './directives/safeLink'
 
 // 导入 naive-ui 组件
 import {
@@ -50,4 +51,8 @@ app.use(pinia)
 app.use(router)
 app.use(naive)
 app.component('font-awesome-icon', FontAwesomeIcon)
+
+// 注册安全链接指令
+registerSafeLink(app)
+
 app.mount('#app')

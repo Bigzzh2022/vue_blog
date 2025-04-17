@@ -3,21 +3,82 @@
     <n-config-provider :theme="theme">
       <NavBar v-if="!isAdminRoute && route?.path !== '/404'" />
       <router-view></router-view>
+      
+      <!-- 外部链接安全提示 -->
+      <ExternalLinkAlert 
+        v-model:visible="showExternalLinkAlert" 
+        :url="externalLinkUrl"
+        @proceed="handleExternalLinkProceed"
+      />
     </n-config-provider>
   </n-message-provider>
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { NMessageProvider, NConfigProvider, darkTheme } from 'naive-ui'
 import NavBar from './components/NavBar.vue'
+import ExternalLinkAlert from './components/ExternalLinkAlert.vue'
+import { registerSafeLink, setGlobalSafeLinkOptions } from './directives/safeLink'
+import { useUserStore } from './stores/user'
 
 const route = useRoute()
+const userStore = useUserStore()
 const isAdminRoute = computed(() => {
   return route?.path?.startsWith('/admin') || false
 })
 const theme = ref(null)
+
+// 外部链接提示状态
+const showExternalLinkAlert = ref(false)
+const externalLinkUrl = ref('')
+
+// 处理外部链接点击
+const handleExternalLink = (url: string) => {
+  externalLinkUrl.value = url
+  showExternalLinkAlert.value = true
+}
+
+// 处理确认访问外部链接
+const handleExternalLinkProceed = () => {
+  // 可以在这里添加记录或其他操作
+  console.log('用户确认访问外部链接:', externalLinkUrl.value)
+}
+
+// 设置外部链接处理选项
+onMounted(() => {
+  // 初始化用户状态
+  userStore.init()
+  
+  // 设置全局选项
+  setGlobalSafeLinkOptions({
+    showAlert: handleExternalLink
+  })
+  
+  // 获取所有外部链接并应用指令
+  const allLinks = document.querySelectorAll('a[href^="http"]')
+  allLinks.forEach(link => {
+    if (!link.hasAttribute('v-safe-link')) {
+      link.setAttribute('v-safe-link', '')
+    }
+  })
+  
+  // 添加对external-link-click事件的监听
+  window.addEventListener('external-link-click', handleExternalLinkEvent)
+})
+
+// 在组件卸载时移除事件监听器
+onUnmounted(() => {
+  window.removeEventListener('external-link-click', handleExternalLinkEvent)
+})
+
+// 处理external-link-click事件
+const handleExternalLinkEvent = (event: Event) => {
+  if (event instanceof CustomEvent && event.detail && event.detail.url) {
+    handleExternalLink(event.detail.url)
+  }
+}
 </script>
 
 <style>

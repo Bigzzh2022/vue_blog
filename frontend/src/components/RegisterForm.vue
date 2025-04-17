@@ -1,136 +1,131 @@
 <template>
   <div class="register-form">
-    <h2>注册</h2>
     <form @submit.prevent="handleSubmit">
       <!-- 用户名输入框 -->
-      <div class="input-group">
+      <div class="form-group">
+        <label for="username">用户名</label>
         <input
+          id="username"
           v-model="username"
           type="text"
-          placeholder="用户名"
+          placeholder="请输入用户名"
           required
+          :class="{ 'error': usernameError }"
           @input="validateUsername"
+          autocomplete="username"
         >
         <!-- 用户名错误提示 -->
-        <div v-if="usernameError" class="error-message">
+        <span v-if="usernameError" class="error-message">
           {{ usernameError }}
-        </div>
+        </span>
       </div>
 
       <!-- 邮箱输入框 -->
-      <div class="input-group">
+      <div class="form-group">
+        <label for="email">邮箱</label>
         <input
+          id="email"
           v-model="email"
           type="email"
-          placeholder="邮箱"
+          placeholder="请输入邮箱"
           required
+          :class="{ 'error': emailError }"
           @input="validateEmail"
+          autocomplete="email"
         >
         <!-- 邮箱错误提示 -->
-        <div v-if="emailError" class="error-message">
+        <span v-if="emailError" class="error-message">
           {{ emailError }}
-        </div>
+        </span>
       </div>
 
       <!-- 密码输入框 -->
-      <div class="input-group">
-        <div class="password-input">
-          <input
-            v-model="password"
-            :type="showPassword ? 'text' : 'password'"
-            placeholder="密码"
-            required
-            @input="validatePassword"
-          >
-          <button
-            type="button"
-            class="toggle-password"
-            @click="togglePasswordVisibility"
-          >
-            <div class="i-ic-baseline-remove-red-eye" />
-          </button>
-        </div>
-
-        <!-- 密码强度提示 -->
-        <div class="password-strength" v-if="password">
-          <div class="strength-info">
-            <span>密码强度：</span>
-            <span :class="strengthClass">{{ strengthText }}</span>
-          </div>
-          <!-- 密码强度进度条 -->
-          <div class="strength-progress">
-            <div 
-              class="strength-progress-bar" 
-              :style="{ width: strengthProgress + '%' }"
-              :class="strengthProgressClass"
-            ></div>
-          </div>
-          <!-- 密码要求列表 -->
-          <div class="password-requirements">
-            <div 
-              v-for="(requirement, index) in passwordRequirements" 
-              :key="index"
-              class="requirement-item"
-              :class="{ 'satisfied': requirement.satisfied }"
-            >
-              <span class="requirement-icon">
-                {{ requirement.satisfied ? '✓' : '✗' }}
-              </span>
-              <span>{{ requirement.text }}</span>
-            </div>
-          </div>
-        </div>
+      <div class="form-group">
+        <label for="password">密码</label>
+        <input
+          id="password"
+          v-model="password"
+          type="password"
+          placeholder="请输入密码"
+          required
+          @input="validatePassword"
+          autocomplete="new-password"
+        >
       </div>
 
       <!-- 确认密码输入框 -->
-      <div class="input-group">
-        <div class="password-input">
-          <input
-            v-model="confirmPassword"
-            :type="showPassword ? 'text' : 'password'"
-            placeholder="确认密码"
-            required
-            @input="validateConfirmPassword"
-          >
-          <button
-            type="button"
-            class="toggle-password"
-            @click="togglePasswordVisibility"
-          >
-            <div class="i-ic-baseline-remove-red-eye" />
-          </button>
-        </div>
+      <div class="form-group">
+        <label for="confirmPassword">确认密码</label>
+        <input
+          id="confirmPassword"
+          v-model="confirmPassword"
+          type="password"
+          placeholder="请再次输入密码"
+          required
+          @input="validateConfirmPassword"
+          autocomplete="new-password"
+        >
         <!-- 密码不匹配提示 -->
-        <div v-if="showPasswordMismatch" class="error-message">
+        <span v-if="showPasswordMismatch" class="error-message">
           两次输入的密码不一致
-        </div>
+        </span>
+      </div>
+
+      <!-- 注册协议勾选 -->
+      <div class="form-group agreement-group">
+        <label class="agreement-label">
+          <input
+            type="checkbox"
+            v-model="agreeTerms"
+          >
+          <span>我已阅读并同意 <router-link to="/terms" target="_blank">使用条款</router-link> 和 <router-link to="/privacy" target="_blank">隐私政策</router-link></span>
+        </label>
       </div>
 
       <!-- 注册按钮 -->
       <button
         type="submit"
-        class="submit-button"
-        :disabled="!isFormValid"
+        class="submit-btn"
+        :disabled="!isFormValid || isSubmitting"
       >
-        注册
+        <span v-if="isSubmitting">
+          <font-awesome-icon :icon="['fas', 'spinner']" spin />
+          注册中...
+        </span>
+        <span v-else>创建账号</span>
       </button>
 
       <!-- 登录链接 -->
-      <div class="login-link">
-        已有账号？
-        <router-link to="/login">立即登录</router-link>
+      <div class="form-footer">
+        <p>已有账号？<router-link to="/login">立即登录</router-link></p>
       </div>
     </form>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
+import { useUserStore } from '@/stores/user'
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { 
+  faCheck, 
+  faTimes, 
+  faSpinner 
+} from '@fortawesome/free-solid-svg-icons'
+
+// 添加 FontAwesome 图标到库
+library.add(
+  faCheck, 
+  faTimes, 
+  faSpinner
+)
 
 const router = useRouter()
 const message = useMessage()
+const userStore = useUserStore()
 
 const username = ref('')
 const usernameError = ref('')
@@ -138,25 +133,10 @@ const email = ref('')
 const emailError = ref('')
 const password = ref('')
 const confirmPassword = ref('')
-const showPassword = ref(false)
 const passwordErrors = ref<string[]>([])
 const showPasswordMismatch = ref(false)
-
-// 密码强度相关
-const strengthLevel = ref(-1)
-const strengthText = computed(() => {
-  if (strengthLevel.value === -1) return ''
-  if (strengthLevel.value === 0) return '弱'
-  if (strengthLevel.value === 1) return '中'
-  return '强'
-})
-const strengthClass = computed(() => {
-  return {
-    'text-red-500': strengthLevel.value === 0,
-    'text-yellow-500': strengthLevel.value === 1,
-    'text-green-500': strengthLevel.value === 2
-  }
-})
+const agreeTerms = ref(false)
+const isSubmitting = ref(false)
 
 // 表单验证
 const isFormValid = computed(() => {
@@ -168,40 +148,12 @@ const isFormValid = computed(() => {
     password.value &&
     confirmPassword.value &&
     passwordErrors.value.length === 0 &&
-    !showPasswordMismatch.value
+    !showPasswordMismatch.value &&
+    agreeTerms.value
   )
 })
 
-// 切换密码可见性
-const togglePasswordVisibility = () => {
-  showPassword.value = !showPassword.value
-}
-
-// 密码要求列表
-const passwordRequirements = ref([
-  { text: '长度至少8位', satisfied: false },
-  { text: '包含大写字母', satisfied: false },
-  { text: '包含小写字母', satisfied: false },
-  { text: '包含数字', satisfied: false },
-  { text: '包含特殊字符', satisfied: false }
-])
-
-// 计算密码强度进度
-const strengthProgress = computed(() => {
-  if (strengthLevel.value === -1) return 0
-  return (strengthLevel.value + 1) * 33.33
-})
-
-// 进度条样式
-const strengthProgressClass = computed(() => {
-  return {
-    'progress-weak': strengthLevel.value === 0,
-    'progress-medium': strengthLevel.value === 1,
-    'progress-strong': strengthLevel.value === 2
-  }
-})
-
-// 修改验证密码强度函数
+// 简化验证密码函数，移除强度评估
 const validatePassword = () => {
   const pwd = password.value
   const requirements = [
@@ -213,37 +165,22 @@ const validatePassword = () => {
   ]
 
   const errors: string[] = []
-  let satisfiedCount = 0
   
   requirements.forEach(req => {
-    const satisfied = req.test(pwd)
-    passwordRequirements.value[req.index].satisfied = satisfied
-    if (!satisfied) {
-      errors.push(passwordRequirements.value[req.index].text)
-    } else {
-      satisfiedCount++
+    if (!req.test(pwd)) {
+      // 仅收集错误信息，不再处理UI显示
+      errors.push('')
     }
   })
 
   passwordErrors.value = errors
-
-  // 更合理的密码强度判断
-  if (satisfiedCount === 0) {
-    strengthLevel.value = -1 // 未输入
-  } else if (satisfiedCount <= 2) {
-    strengthLevel.value = 0  // 弱
-  } else if (satisfiedCount <= 4) {
-    strengthLevel.value = 1  // 中
-  } else {
-    strengthLevel.value = 2  // 强
-  }
 
   if (confirmPassword.value) {
     validateConfirmPassword()
   }
 }
 
-// 验证确认密码
+// 保留其他验证函数
 const validateConfirmPassword = () => {
   if (confirmPassword.value) {
     showPasswordMismatch.value = password.value !== confirmPassword.value
@@ -257,17 +194,27 @@ const handleSubmit = async () => {
   if (!isFormValid.value) return
 
   try {
-    // TODO: 实现注册逻辑
-    const userData = {
+    isSubmitting.value = true
+    
+    // 使用Store注册
+    await userStore.register({
       username: username.value.trim(),
       email: email.value.trim(),
       password: password.value
-    }
-    console.log('注册数据：', userData)
-    message.success('注册成功')
-    router.push('/login')
+    })
+    
+    // 注册成功提示
+    message.success('注册成功，即将为您跳转到登录页面')
+    
+    // 延迟跳转，让用户看到成功消息
+    setTimeout(() => {
+      router.push('/login')
+    }, 1500)
   } catch (error) {
-    message.error('注册失败，请重试')
+    console.error('注册失败:', error)
+    message.error(error instanceof Error ? error.message : '注册失败，请重试')
+  } finally {
+    isSubmitting.value = false
   }
 }
 
@@ -434,183 +381,198 @@ const validateUsername = () => {
 </script>
 
 <style scoped>
-.register-container {
-  min-height: 100vh;
-  padding-top: 80px;
-  background-color: #f5f7fa;
-}
-
 .register-form {
-  max-width: 400px;
-  margin: 0 auto;
-  padding: 30px;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  max-width: 100%;
+  padding: 0px 30px 30px;
 }
 
 h2 {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 8px;
+  color: #333;
   font-size: 24px;
-  font-weight: bold;
-  color: #2c3e50;
+  font-weight: 600;
 }
 
-.input-group {
+.subtitle {
+  text-align: center;
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 30px;
+}
+
+.form-group {
   margin-bottom: 20px;
+  position: relative;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
 }
 
 input {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 16px;
+  padding: 12px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s;
+  background-color: #f9f9f9;
+  box-sizing: border-box;
+  color: #333;
 }
 
 input:focus {
+  border-color: #1e3c72;
   outline: none;
-  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(30, 60, 114, 0.15);
+  background-color: #fff;
 }
 
-.password-input {
+input.error {
+  border-color: #ff4d4f;
+  background-color: #fff1f0;
+}
+
+.error-message {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+}
+
+.password-input-wrapper {
   position: relative;
 }
 
-.toggle-password {
+.password-toggle {
   position: absolute;
-  right: 10px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   background: none;
   border: none;
   cursor: pointer;
   color: #666;
+  transition: color 0.3s;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
 }
 
-.password-strength {
-  margin-top: 8px;
-  font-size: 14px;
+.password-toggle:hover {
+  color: #1e3c72;
+  background-color: rgba(0, 0, 0, 0.04);
 }
 
-.error-message {
-  color: #ff4d4f;
-  font-size: 14px;
-  margin-top: 4px;
-  transition: all 0.3s ease;
+.password-toggle:focus {
+  outline: none;
 }
 
-.submit-button {
-  width: 100%;
-  padding: 12px;
-  background-color: #4a90e2;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 16px;
+.agreement-group {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.agreement-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
-}
-
-.submit-button:hover {
-  background-color: #357abd;
-}
-
-.submit-button:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-.login-link {
-  text-align: center;
-  margin-top: 16px;
   font-size: 14px;
+  color: #666;
 }
 
-.login-link a {
-  color: #4a90e2;
+.agreement-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #1e3c72;
+  flex-shrink: 0;
+}
+
+.agreement-label span {
+  font-size: 14px;
+  color: #666;
+  line-height: 18px;
+}
+
+.agreement-label a {
+  color: #1e3c72;
   text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
 }
 
-.login-link a:hover {
+.agreement-label a:hover {
+  color: #2a5298;
   text-decoration: underline;
 }
 
-.text-red-500 {
-  color: #ff4d4f;
-}
-
-.text-yellow-500 {
-  color: #faad14;
-}
-
-.text-green-500 {
-  color: #52c41a;
-}
-
-.strength-info {
-  margin-bottom: 8px;
-}
-
-.strength-progress {
-  height: 4px;
-  background-color: #f0f0f0;
-  border-radius: 2px;
-  margin-bottom: 12px;
-}
-
-.strength-progress-bar {
-  height: 100%;
-  border-radius: 2px;
+.submit-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
   transition: all 0.3s ease;
-}
-
-.progress-weak {
-  background-color: #ff4d4f;
-}
-
-.progress-medium {
-  background-color: #faad14;
-}
-
-.progress-strong {
-  background-color: #52c41a;
-}
-
-.password-requirements {
-  margin-top: 8px;
-}
-
-.requirement-item {
+  margin-top: 15px;
+  box-shadow: 0 4px 8px rgba(30, 60, 114, 0.15);
   display: flex;
+  justify-content: center;
   align-items: center;
-  margin-bottom: 4px;
+  gap: 8px;
+  height: 46px;
+}
+
+.submit-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(30, 60, 114, 0.2);
+}
+
+.submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  background: linear-gradient(135deg, #5a6d91 0%, #6f83b1 100%);
+}
+
+.form-footer {
+  margin-top: 24px;
+  text-align: center;
   font-size: 14px;
-  color: #ff4d4f;
+  color: #666;
 }
 
-.requirement-item.satisfied {
-  color: #52c41a;
+.form-footer a {
+  color: #1e3c72;
+  text-decoration: none;
+  font-weight: 500;
 }
 
-.requirement-icon {
-  margin-right: 8px;
-  font-weight: bold;
+.form-footer a:hover {
+  color: #2a5298;
+  text-decoration: underline;
 }
 
-.requirement-item.satisfied .requirement-icon {
-  color: #52c41a;
+@media (max-width: 480px) {
+  .register-form {
+    padding: 20px;
+  }
 }
-
-/* 添加输入框错误状态样式 */
-input.error {
-  border-color: #ff4d4f;
-}
-
-input.error:focus {
-  border-color: #ff4d4f;
-  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.2);
-}
-
-
 </style>

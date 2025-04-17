@@ -12,8 +12,14 @@
       class="admin-sider"
     >
       <div class="logo">
-        <h2 v-if="!collapsed">后台管理</h2>
-        <h2 v-else>后台</h2>
+        <n-dropdown :options="logoUserOptions" trigger="click" @select="handleLogoSelect">
+          <n-avatar
+            round
+            size="medium"
+            src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg"
+            class="user-avatar"
+          />
+        </n-dropdown>
       </div>
       <n-menu
         :collapsed="collapsed"
@@ -35,16 +41,11 @@
           </div>
           <div class="header-right">
             <n-space>
-              <n-avatar
-                round
-                size="small"
-                src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg"
-              />
-              <n-dropdown :options="userOptions" trigger="click">
+             
+              <n-dropdown :options="userOptions" trigger="click" @select="handleSelect">
                 <n-button text>
-                  管理员
-                  <n-icon size="14" style="margin-left: 4px">
-                    <chevron-down />
+                  <n-icon size="16">
+                    <setting-outlined />
                   </n-icon>
                 </n-button>
               </n-dropdown>
@@ -85,13 +86,18 @@ import {
   FolderOutlined,
   SettingOutlined,
   PictureOutlined,
-  LinkOutlined
+  LinkOutlined,
+  FileOutlined
 } from '@vicons/antd'
 import { ChevronDown } from '@vicons/ionicons5'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
 const collapsed = ref(false)
+
+// 导入用户store
+const userStore = useUserStore()
 
 const activeKey = computed(() => route.name as string)
 
@@ -110,12 +116,37 @@ const userOptions = [
   {
     label: '个人设置',
     key: 'settings'
+  }
+]
+
+// 添加左上角头像下拉菜单选项
+const logoUserOptions = [
+  {
+    label: '个人资料',
+    key: 'profile'
   },
   {
     label: '退出登录',
     key: 'logout'
   }
 ]
+
+// 处理左上角头像下拉菜单选择
+const handleLogoSelect = (key: string) => {
+  if (key === 'logout') {
+    userStore.logout()
+    router.push('/login')
+  } else if (key === 'profile') {
+    router.push('/admin/settings')
+  }
+}
+
+// 处理下拉菜单选择
+const handleSelect = (key: string) => {
+  if (key === 'settings') {
+    router.push('/admin/settings')
+  }
+}
 
 const menuOptions = [
   {
@@ -143,6 +174,12 @@ const menuOptions = [
     onClick: () => router.push('/admin/categories')
   },
   {
+    label: '静态页面',
+    key: 'pages',
+    icon: renderIcon(FileOutlined),
+    onClick: () => router.push('/admin/pages')
+  },
+  {
     label: '媒体库',
     key: 'media',
     icon: renderIcon(PictureOutlined),
@@ -164,10 +201,6 @@ const menuOptions = [
 
 function renderIcon(icon: any) {
   return () => h(icon)
-}
-
-const logout = () => {
-  router.push('/login')
 }
 </script>
 

@@ -1,65 +1,71 @@
 <template>
   <div class="nav-wrapper">
-    <nav class="nav-container" :class="{ 'dark-mode': isDarkMode }">
+    <nav class="nav-container" :class="{ 'dark-mode': isDarkMode, 'island-active': showDynamicIsland }">
       <div class="nav-content">
-        <Transition name="fade-scale">
-          <div v-if="showDynamicIsland" class="dynamic-island">
-            <Transition name="fade" mode="out-in">
-              <div v-if="!isSearchActive && currentTitle" class="title-content" key="title">
-                <div class="pill-left">
-                  <div class="icon-wrapper">
-                    <font-awesome-icon :icon="['fas', 'book-open']" />
+        <div v-if="showDynamicIsland" class="dynamic-island-wrapper">
+          <Transition name="fade-scale" mode="out-in">
+            <div class="dynamic-island">
+              <Transition name="fade" mode="out-in">
+                <div v-if="!isSearchActive && currentTitle" class="title-content" key="title">
+                  <div class="pill-left">
+                    <div class="icon-wrapper">
+                      <font-awesome-icon :icon="['fas', 'book-open']" />
+                    </div>
+                  </div>
+                  <div class="pill-center">
+                    <span class="title-text">{{ currentTitle }}</span>
+                    <span class="subtitle">正在阅读</span>
+                  </div>
+                  <div class="pill-right">
+                    <div class="search-trigger" @click="activateSearch">
+                      <font-awesome-icon :icon="['fas', 'search']" />
+                    </div>
                   </div>
                 </div>
-                <div class="pill-center">
-                  <span class="title-text">{{ currentTitle }}</span>
-                  <span class="subtitle">正在阅读</span>
-                </div>
-                <div class="pill-right">
-                  <div class="search-trigger" @click="activateSearch">
-                    <font-awesome-icon :icon="['fas', 'search']" />
+                <div v-else class="search-content" key="search">
+                  <div class="pill-left">
+                    <div class="icon-wrapper search">
+                      <font-awesome-icon :icon="['fas', 'search']" />
+                    </div>
+                  </div>
+                  <div class="pill-center">
+                    <input 
+                      ref="searchInput"
+                      v-model="searchQuery" 
+                      class="search-input"
+                      placeholder="搜索文章..."
+                      @keyup.enter="handleSearch"
+                      @keyup.esc="deactivateSearch"
+                    />
+                  </div>
+                  <div class="pill-right">
+                    <div class="close-button" @click="deactivateSearch">
+                      <font-awesome-icon :icon="['fas', 'xmark']" />
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div v-else class="search-content" key="search">
-                <div class="pill-left">
-                  <div class="icon-wrapper search">
-                    <font-awesome-icon :icon="['fas', 'search']" />
-                  </div>
-                </div>
-                <div class="pill-center">
-                  <input 
-                    ref="searchInput"
-                    v-model="searchQuery" 
-                    class="search-input"
-                    placeholder="搜索文章..."
-                    @keyup.enter="handleSearch"
-                    @keyup.esc="deactivateSearch"
-                  />
-                </div>
-                <div class="pill-right">
-                  <div class="close-button" @click="deactivateSearch">
-                    <font-awesome-icon :icon="['fas', 'xmark']" />
-                  </div>
-                </div>
-              </div>
-            </Transition>
-          </div>
-        </Transition>
+              </Transition>
+            </div>
+          </Transition>
+        </div>
         <Transition name="fade">
           <div v-if="!showDynamicIsland" class="nav-menu">
-            <div 
-              v-for="item in navItems" 
-              :key="item.path"
-              class="nav-item"
-              :class="{ 'is-active': isActive(item.path) }"
-              @click="router.push(item.path)"
-            >
-              <font-awesome-icon :icon="item.icon" />
-              {{ item.text }}
+            <div class="menu-left">
+              <div 
+                v-for="item in navItems" 
+                :key="item.path"
+                class="nav-item"
+                :class="{ 'is-active': isActive(item.path) }"
+                @click="router.push(item.path)"
+              >
+                <font-awesome-icon :icon="item.icon" />
+                {{ item.text }}
+              </div>
             </div>
-            <div class="nav-item search-btn" @click="activateSearch">
-              <font-awesome-icon :icon="['fas', 'search']" />
+            <div class="menu-right">
+              <div class="nav-item search-btn" @click="activateSearch">
+                <font-awesome-icon :icon="['fas', 'search']" />
+              </div>
             </div>
           </div>
         </Transition>
@@ -72,36 +78,31 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useArticleStore } from '@/stores/article'
+import { useUserStore } from '@/stores/user'
 import { storeToRefs } from 'pinia'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { 
   faHouse, 
-  faBook, 
-  faStar, 
-  faPen, 
-  faDesktop, 
   faLink,
   faClock,
   faList,
   faUser,
   faSearch,
   faBookOpen,
-  faXmark
+  faXmark,
+  faGear
 } from '@fortawesome/free-solid-svg-icons'
 
 library.add(
   faHouse, 
-  faBook, 
-  faStar, 
-  faPen, 
-  faDesktop, 
   faLink,
   faClock,
   faList,
   faUser,
   faSearch,
   faBookOpen,
-  faXmark
+  faXmark,
+  faGear
 )
 
 // 监听暗色模式
@@ -110,43 +111,65 @@ const updateTheme = () => {
   isDarkMode.value = document.documentElement.classList.contains('dark-theme')
 }
 
+// 响应式窗口宽度
+const windowWidth = ref(window.innerWidth)
+const updateWindowWidth = () => {
+  windowWidth.value = window.innerWidth
+}
+
 // 监听主题变化
 const observer = new MutationObserver(updateTheme)
 
 const route = useRoute()
 const router = useRouter()
 const articleStore = useArticleStore()
+const userStore = useUserStore()
 const { currentTitle } = storeToRefs(articleStore)
+const { isLoggedIn, isAdmin } = storeToRefs(userStore)
 
 // 搜索相关状态
 const isSearchActive = ref(false)
 const searchQuery = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
 
+// 判断是否为文章页面
+const isArticlePage = computed(() => {
+  // 假设文章路径是以 /article 或 /post 开头
+  return route.path.startsWith('/article') || route.path.startsWith('/post')
+})
+
 // 计算是否显示动态岛
 const showDynamicIsland = computed(() => {
   console.log('动态岛状态:', {
+    isArticlePage: isArticlePage.value,
     isSearchActive: isSearchActive.value,
     currentTitle: currentTitle.value,
     isDarkMode: isDarkMode.value
   })
-  return isSearchActive.value || Boolean(currentTitle.value)
+  // 只有在文章页面且有标题或者搜索激活时才显示灵动岛
+  return (isArticlePage.value && Boolean(currentTitle.value)) || isSearchActive.value
 })
 
-// 监听路由变化
+// 监听路由变化，在路由变化时重置搜索状态
 watch(() => route.path, () => {
   console.log('路由变化, 当前标题:', currentTitle.value)
+  // 如果不是从文章页面切换到文章页面，则关闭搜索
+  if (!isArticlePage.value) {
+    isSearchActive.value = false
+  }
 }, { immediate: true })
 
 // 激活搜索
 const activateSearch = () => {
   console.log('激活搜索')
+  
+  // 直接设置搜索状态并延迟聚焦，简化逻辑
   isSearchActive.value = true
-  // 等待 DOM 更新后聚焦输入框
+  
+  // 使用较长延迟确保过渡动画完成后再聚焦
   setTimeout(() => {
-    console.log('尝试聚焦搜索框:', searchInput.value)
     searchInput.value?.focus()
-  }, 50)
+  }, 400)
 }
 
 // 关闭搜索
@@ -175,17 +198,51 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 }
 
-const navItems = [
-  { path: '/', text: '主页', icon: ['fas', 'house'] },
-  { path: '/chase', text: '追番', icon: ['fas', 'book'] },
-  { path: '/favorites', text: '收藏', icon: ['fas', 'star'] },
-  { path: '/notes', text: '记录', icon: ['fas', 'pen'] },
-  { path: '/monitor', text: '监控', icon: ['fas', 'desktop'] },
-  { path: '/friends', text: '友链', icon: ['fas', 'link'] },
-  { path: '/timeline', text: '时光轴', icon: ['fas', 'clock'] },
-  { path: '/categories', text: '分类', icon: ['fas', 'list'] },
-  { path: '/login', text: '登录', icon: ['fas', 'user'] }
-]
+// 根据登录状态动态生成导航项
+const navItems = computed(() => {
+  const items = [
+    { path: '/', text: '主页', icon: ['fas', 'house'] },
+    { path: '/friends', text: '友链', icon: ['fas', 'link'] },
+    { path: '/timeline', text: '时光轴', icon: ['fas', 'clock'] },
+    { path: '/categories', text: '分类', icon: ['fas', 'list'] },
+  ]
+  
+  // 如果用户已登录，显示"后台"按钮，否则显示"登录"按钮
+  if (isLoggedIn.value) {
+    items.push({ path: '/admin/dashboard', text: '后台', icon: ['fas', 'gear'] })
+  } else {
+    items.push({ path: '/login', text: '登录', icon: ['fas', 'user'] })
+  }
+  
+  return items
+})
+
+// 计算菜单项所需宽度
+const menuWidth = computed(() => {
+  // 基础宽度 + 每个菜单项的平均宽度 * 菜单项数量
+  // 每个菜单项平均宽度约为 75px (调整为更精确的值)
+  const baseWidth = 60 // 增加基础内边距，为搜索按钮预留空间
+  const itemWidth = 78 // 略微增加每个菜单项平均宽度
+  const itemCount = navItems.value.length // 将navItems改为computed
+  
+  // 额外添加搜索按钮所需的宽度
+  const searchBtnWidth = 50 // 增加搜索按钮宽度以确保足够空间
+  
+  return Math.min(850, Math.max(450, baseWidth + itemWidth * itemCount + searchBtnWidth))
+})
+
+// 计算导航容器宽度
+const navContainerWidth = computed(() => {
+  // 在移动设备上
+  if (windowWidth.value <= 768) {
+    // 移动设备上使用百分比宽度，但至少有足够空间容纳所有菜单项
+    const minRequiredWidth = Math.min(menuWidth.value + 20, windowWidth.value * 0.95)
+    return `${minRequiredWidth}px`
+  } else {
+    // 桌面设备上菜单模式下导航容器宽度与菜单宽度匹配
+    return `${menuWidth.value}px`
+  }
+})
 
 const isActive = (path: string) => {
   // 如果是根路径，则不激活任何导航项
@@ -196,18 +253,45 @@ const isActive = (path: string) => {
   return route.path === path;
 }
 
+// 计算灵动岛宽度
+const islandWidth = computed(() => {
+  if (isSearchActive.value) {
+    // 搜索模式下宽度
+    return windowWidth.value <= 768 ? "92%" : "min(500px, 85%)"
+  } else if (currentTitle.value) {
+    // 标题模式下的宽度，至少要能显示标题
+    const titleLength = currentTitle.value.length
+    // 根据标题长度计算宽度，每个字符约10px，加上左右icon和padding约80px
+    const titleWidth = Math.min(500, Math.max(250, titleLength * 10 + 80))
+    return windowWidth.value <= 768 
+      ? `${Math.min(titleWidth, windowWidth.value * 0.9)}px` 
+      : `${titleWidth}px`
+  } else {
+    // 默认菜单模式下的宽度
+    return windowWidth.value <= 768 
+      ? `${Math.min(menuWidth.value, windowWidth.value * 0.9)}px` 
+      : `${menuWidth.value}px`
+  }
+})
+
 onMounted(() => {
+  // 确保用户状态已加载
+  userStore.init()
+  
   updateTheme()
+  updateWindowWidth() // 初始化窗口宽度
   observer.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['class']
   })
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('resize', updateWindowWidth) // 监听窗口大小变化
 })
 
 onUnmounted(() => {
   observer.disconnect()
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('resize', updateWindowWidth) // 移除窗口大小变化监听
 })
 </script>
 
@@ -229,16 +313,38 @@ onUnmounted(() => {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: 50px;
-  padding: 5px;
+  padding: 5px 12px; /* 调整水平内边距 */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   margin: 0 auto;
-  max-width: 800px;
+  max-width: v-bind("navContainerWidth");
+  width: v-bind("navContainerWidth");
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); /* 增加过渡时间 */
+  position: relative;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box; /* 确保内边距不会增加元素总宽度 */
+}
+
+.nav-container.island-active {
+  background-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  padding: 0;
+  max-width: 100%;
   width: 100%;
-  transition: all 0.3s ease;
+  /* 当显示灵动岛时，延迟背景色变化，确保动画平滑 */
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.1s; /* 明确设置所有属性的过渡 */
 }
 
 .nav-container.dark-mode {
   background-color: rgba(40, 44, 52, 0.8);
+}
+
+.nav-container.dark-mode.island-active {
+  background-color: transparent;
 }
 
 .nav-content {
@@ -247,31 +353,44 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 10px;
+  width: 100%;
 }
 
 .nav-menu {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px;
   width: 100%;
+  padding: 0;
+  margin: 0;
+  justify-content: space-between; /* 使用space-between更好地分配空间 */
+}
+
+.menu-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-right {
+  display: flex;
+  align-items: center;
 }
 
 .nav-item {
-  padding: 0 12px;
+  padding: 0 12px; /* 增加内边距 */
   color: #666;
   text-decoration: none;
   font-size: 14px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 6px; /* 增加图标和文字间距 */
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   height: 30px;
   border-radius: 15px;
   white-space: nowrap;
   user-select: none;
+  flex-shrink: 0; /* 防止菜单项缩小 */
 }
 
 .nav-item.is-active {
@@ -299,11 +418,48 @@ onUnmounted(() => {
   background-color: rgba(64, 169, 255, 0.1);
 }
 
-.dynamic-island {
+.nav-item.search-btn {
+  color: #666;
+  background-color: transparent;
+  padding: 0 12px; /* 增加内边距确保搜索图标有足够空间 */
+  min-width: 36px; /* 增加最小宽度 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0; /* 防止搜索按钮缩小 */
+  height: 30px; /* 确保与其他菜单项高度一致 */
+  margin-right: 4px; /* 添加右边距，避免贴近容器边缘 */
+}
+
+.dark-mode .nav-item.search-btn {
+  color: #bbb;
+  background-color: transparent;
+}
+
+.nav-item.search-btn:hover {
+  color: #1890ff;
+  background-color: rgba(24, 144, 255, 0.1);
+}
+
+.dark-mode .nav-item.search-btn:hover {
+  color: #40a9ff;
+  background-color: rgba(64, 169, 255, 0.1);
+}
+
+.dynamic-island-wrapper {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.dynamic-island {
+  position: relative;
   background: rgba(0, 0, 0, 0.95);
   color: white;
   border-radius: 44px;
@@ -311,16 +467,16 @@ onUnmounted(() => {
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
-  width: min(500px, 85%);
+  width: v-bind("islandWidth");
   height: 44px;
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
-  z-index: 10;
+  z-index: 20;
 }
 
 .dark-mode .dynamic-island {
@@ -428,7 +584,7 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 300px;
+  max-width: calc(100% - 20px);
   line-height: 1.2;
   display: block;
   height: auto;
@@ -445,42 +601,57 @@ onUnmounted(() => {
 /* 过渡动画 */
 .fade-enter-active,
 .fade-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); /* 增加过渡时间 */
+  position: absolute;
+  width: 100%;
 }
 
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+  transform: translateY(-5px);
 }
 
 .fade-scale-enter-active,
 .fade-scale-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); /* 增加过渡时间 */
 }
 
 .fade-scale-enter-from,
 .fade-scale-leave-to {
   opacity: 0;
-  transform: translate(-50%, -50%) scale(0.95);
+  transform: scale(0.98); /* 简化变换 */
 }
 
-/* 响应式布局 */
+/* 修改响应式布局 */
 @media screen and (max-width: 768px) {
-  .nav-container {
-    width: 92%;
+  .nav-wrapper {
+    padding: 0 10px;
   }
   
-  .dynamic-island {
-    width: 92%;
+  .nav-container {
+    width: v-bind("navContainerWidth");
+    padding: 5px 10px; /* 调整移动设备上的内边距 */
   }
-
-  .nav-menu {
+  
+  .nav-content {
+    height: 36px; /* 减小高度以适应移动设备 */
+  }
+  
+  .menu-left {
     gap: 4px;
   }
 
   .nav-item {
-    padding: 0 8px;
+    padding: 0 8px; /* 调整内边距 */
     font-size: 13px;
+    gap: 3px;
+    height: 28px; /* 减小高度 */
+  }
+  
+  .nav-item.search-btn {
+    padding: 0 8px;
+    min-width: 30px;
   }
 
   .title-content,

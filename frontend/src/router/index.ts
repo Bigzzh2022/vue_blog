@@ -7,6 +7,7 @@ import TimelineView from '../views/TimelineView.vue'
 import FriendsView from '../views/FriendsView.vue'
 import SearchView from '@/views/SearchView.vue'
 import NotFound from '../views/NotFound.vue'
+import { userService } from '@/services/userService'
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -17,12 +18,18 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/login',
     name: 'login',
-    component: LoginView
+    component: LoginView,
+    meta: {
+      requiresGuest: true
+    }
   },
   {
     path: '/register',
     name: 'register',
-    component: RegisterView
+    component: RegisterView,
+    meta: {
+      requiresGuest: true
+    }
   },
   {
     path: '/categories',
@@ -39,6 +46,10 @@ const routes: Array<RouteRecordRaw> = [
     path: '/admin',
     name: 'admin',
     component: () => import('../views/admin/AdminLayout.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true
+    },
     children: [
       {
         path: 'dashboard',
@@ -84,6 +95,11 @@ const routes: Array<RouteRecordRaw> = [
         path: 'links',
         name: 'links',
         component: () => import('../views/admin/LinksView.vue')
+      },
+      {
+        path: 'pages',
+        name: 'pages',
+        component: () => import('../views/admin/PagesView.vue')
       }
     ]
   },
@@ -111,36 +127,18 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
-    path: '/chase',
-    name: 'chase',
-    component: () => import('../views/ChaseView.vue'),
+    path: '/user',
+    name: 'user-center',
+    component: () => import('../views/UserCenterView.vue'),
     meta: {
-      title: '追番'
+      requiresAuth: true
     }
   },
   {
-    path: '/favorites',
-    name: 'favorites',
-    component: () => import('../views/FavoritesView.vue'),
-    meta: {
-      title: '收藏'
-    }
-  },
-  {
-    path: '/notes',
-    name: 'notes',
-    component: () => import('../views/NotesView.vue'),
-    meta: {
-      title: '记录'
-    }
-  },
-  {
-    path: '/monitor',
-    name: 'monitor',
-    component: () => import('../views/MonitorView.vue'),
-    meta: {
-      title: '监控'
-    }
+    path: '/:slug',
+    name: 'static-page',
+    component: () => import('../views/StaticPageView.vue'),
+    props: true
   },
   // 404 路由应该放在最后
   {
@@ -157,5 +155,43 @@ const router = createRouter({
   history: createWebHistory(),
   routes
 })
+
+// 全局路由守卫
+router.beforeEach((to, from, next) => {
+  const isLoggedIn = userService.isLoggedIn();
+  
+  // 获取用户信息 (这只是简单的模拟，实际中可能需要从store或API获取)
+  const userInfo = userService.getSavedUserInfo && userService.getSavedUserInfo();
+  const isAdmin = userInfo?.role === 'admin';
+  
+  // 需要登录的页面
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    if (!isLoggedIn) {
+      // 如果未登录，重定向到登录页
+      next({
+        path: '/login',
+        query: { redirect: to.fullPath }
+      });
+    } else if (to.matched.some(record => record.meta.requiresAdmin) && !isAdmin) {
+      // 如果需要管理员权限但不是管理员
+      next({ path: '/' });
+    } else {
+      next();
+    }
+  } 
+  // 游客专属页面（如登录/注册）
+  else if (to.matched.some(record => record.meta.requiresGuest)) {
+    if (isLoggedIn) {
+      // 如果已登录，重定向到首页
+      next({ path: '/' });
+    } else {
+      next();
+    }
+  } 
+  // 其他页面正常访问
+  else {
+    next();
+  }
+});
 
 export default router
