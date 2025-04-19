@@ -106,9 +106,6 @@ const validateForm = () => {
   if (!loginForm.password) {
     formErrors.password = '请输入密码'
     isValid = false
-  } else if (loginForm.password.length < 6) {
-    formErrors.password = '密码至少需要6个字符'
-    isValid = false
   }
   
   return isValid
@@ -330,4 +327,4 @@ h2 {
   color: #2a5298;
   text-decoration: underline;
 }
-</style> 
+</style>

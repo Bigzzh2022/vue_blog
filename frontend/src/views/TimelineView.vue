@@ -12,7 +12,21 @@
       </div>
     </div>
 
-    <div class="timeline-content">
+    <div v-if="loading" class="loading-state">
+      <n-spin size="medium" />
+      <p>加载文章中...</p>
+    </div>
+    
+    <div v-else-if="error" class="error-state">
+      <p>{{ error }}</p>
+      <n-button @click="fetchPosts">重试</n-button>
+    </div>
+    
+    <div v-else-if="timelineData.length === 0" class="empty-state">
+      <n-empty description="暂无文章" />
+    </div>
+    
+    <div v-else class="timeline-content">
       <div v-for="year in timelineData" :key="year.year" class="year-group">
         <div class="year-header">
           <h3>{{ year.year }}</h3>
@@ -24,7 +38,7 @@
             v-for="post in year.posts"
             :key="post.id"
             :title="post.title"
-            :time="post.date"
+            :time="formatDate(post.publishDate)"
             :type="post.type"
           >
             <template #content>
@@ -58,79 +72,125 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { 
   NTimeline, 
   NTimelineItem, 
   NSpace, 
   NIcon, 
-  NTag 
+  NTag,
+  NSpin,
+  NEmpty,
+  NButton
 } from 'naive-ui'
 import { 
   ClockCircleOutlined,
   FolderOutlined
 } from '@vicons/antd'
+import { articleService, type Post as ApiPost } from '@/services/articleService'
 
-interface Post {
-  id: number
-  title: string
-  description: string
-  date: string
-  category: string
-  tags: string[]
+// 扩展API返回的Post类型，添加时间轴显示类型
+interface TimelinePost extends ApiPost {
   type: 'default' | 'success' | 'info' | 'warning' | 'error'
 }
 
 interface YearGroup {
   year: number
-  posts: Post[]
+  posts: TimelinePost[]
 }
 
-// 模拟时间轴数据
-const timelineData = ref<YearGroup[]>([
-  {
-    year: 2024,
-    posts: [
-      {
-        id: 1,
-        title: 'Vue3 组合式 API 最佳实践',
-        description: '本文介绍了 Vue3 组合式 API 的使用技巧和最佳实践，帮助你更好地组织代码...',
-        date: '2024-01-15',
-        category: '技术',
-        tags: ['Vue', 'TypeScript'],
-        type: 'success'
-      },
-      {
-        id: 2,
-        title: 'TypeScript 高级技巧分享',
-        description: '深入探讨 TypeScript 的高级特性，包括类型体操、泛型和装饰器等内容...',
-        date: '2024-01-14',
-        category: '技术',
-        tags: ['TypeScript', 'JavaScript'],
-        type: 'info'
+// 状态变量
+const loading = ref(false)
+const error = ref<string | null>(null)
+const timelineData = ref<YearGroup[]>([])
+
+// 获取所有文章并按年份分组
+const fetchPosts = async () => {
+  loading.value = true
+  error.value = null
+  
+  try {
+    // 获取所有已发布的文章
+    const response = await articleService.getPosts({ status: 'published' })
+    console.log('文章接口返回数据', response);
+    const posts = Array.isArray(response) ? response : []
+    
+    // 将文章按年份分组
+    const postsByYear = new Map<number, TimelinePost[]>()
+    
+    posts.forEach(post => {
+      // 从发布日期提取年份
+      const publishDate = new Date(post.publishDate)
+      const year = publishDate.getFullYear()
+      
+      // 根据分类决定显示类型
+      let type: TimelinePost['type'] = 'default'
+      switch (post.category.toLowerCase()) {
+        case '技术':
+          type = 'success'
+          break
+        case '生活':
+          type = 'info'
+          break
+        case '随笔':
+          type = 'warning'
+          break
+        default:
+          type = 'default'
       }
-    ]
-  },
-  {
-    year: 2023,
-    posts: [
-      {
-        id: 3,
-        title: '2023 年度总结',
-        description: '回顾过去一年的收获，展望新的一年的目标和计划...',
-        date: '2023-12-31',
-        category: '生活',
-        tags: ['随笔'],
-        type: 'warning'
+      
+      // 添加到对应年份的数组中
+      const timelinePost: TimelinePost = { ...post, type }
+      
+      if (!postsByYear.has(year)) {
+        postsByYear.set(year, [])
       }
-    ]
+      postsByYear.get(year)!.push(timelinePost)
+    })
+    
+    // 将Map转换为数组并按年份降序排序
+    const result: YearGroup[] = []
+    
+    // 将年份按降序排序
+    const sortedYears = Array.from(postsByYear.keys()).sort((a, b) => b - a)
+    
+    for (const year of sortedYears) {
+      const yearPosts = postsByYear.get(year)!
+      // 在每个年份内按日期降序排序文章
+      yearPosts.sort((a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime())
+      
+      result.push({
+        year,
+        posts: yearPosts
+      })
+    }
+    
+    timelineData.value = result
+  } catch (err) {
+    console.error('获取文章列表失败:', err)
+    error.value = '获取文章列表失败，请稍后重试'
+  } finally {
+    loading.value = false
   }
-])
+}
 
 // 计算文章总数
 const totalPosts = computed(() => 
   timelineData.value.reduce((sum, year) => sum + year.posts.length, 0)
 )
+
+// 格式化日期
+const formatDate = (date: string) => {
+  return new Date(date).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+}
+
+onMounted(() => {
+  fetchPosts()
+})
 </script>
 
 <style scoped>

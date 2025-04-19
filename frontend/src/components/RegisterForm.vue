@@ -133,7 +133,6 @@ const email = ref('')
 const emailError = ref('')
 const password = ref('')
 const confirmPassword = ref('')
-const passwordErrors = ref<string[]>([])
 const showPasswordMismatch = ref(false)
 const agreeTerms = ref(false)
 const isSubmitting = ref(false)
@@ -147,34 +146,13 @@ const isFormValid = computed(() => {
     !emailError.value &&
     password.value &&
     confirmPassword.value &&
-    passwordErrors.value.length === 0 &&
-    !showPasswordMismatch.value &&
+        !showPasswordMismatch.value &&
     agreeTerms.value
   )
 })
 
 // 简化验证密码函数，移除强度评估
 const validatePassword = () => {
-  const pwd = password.value
-  const requirements = [
-    { test: (p: string) => p.length >= 8, index: 0 },
-    { test: (p: string) => /[A-Z]/.test(p), index: 1 },
-    { test: (p: string) => /[a-z]/.test(p), index: 2 },
-    { test: (p: string) => /\d/.test(p), index: 3 },
-    { test: (p: string) => /[!@#$%^&*(),.?":{}|<>+\-_=\[\];'~`/\\]/.test(p), index: 4 }
-  ]
-
-  const errors: string[] = []
-  
-  requirements.forEach(req => {
-    if (!req.test(pwd)) {
-      // 仅收集错误信息，不再处理UI显示
-      errors.push('')
-    }
-  })
-
-  passwordErrors.value = errors
-
   if (confirmPassword.value) {
     validateConfirmPassword()
   }

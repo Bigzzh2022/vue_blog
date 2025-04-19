@@ -36,6 +36,9 @@ const USER_INFO_KEY = 'user_info';
 /**
  * 用户服务类
  */
+import http from '@/services/http'
+import authService from '@/services/authService'
+
 class UserService {
   /**
    * 用户登录
@@ -44,38 +47,28 @@ class UserService {
    */
   async login(params: LoginParams): Promise<LoginResponse> {
     try {
-      // TODO: 替换为实际的API调用
-      console.log('登录请求参数:', params);
+      // 使用authService进行登录
+      const user = await authService.login(params.username, params.password);
+      const token = authService.getToken() || '';
       
-      // 模拟API调用
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 构造返回对象
+      const response: LoginResponse = {
+        token,
+        user: {
+          id: user.id || '',
+          username: user.username,
+          email: user.email || '',
+          avatar: user.avatar,
+          role: user.role || 'user',
+          createdAt: user.createdAt || new Date().toISOString()
+        }
+      };
       
-      // 模拟测试账户
-      if (params.username === 'test' && params.password === 'password') {
-        const mockResponse: LoginResponse = {
-          token: 'mock_token_' + Date.now(),
-          user: {
-            id: '1',
-            username: 'test',
-            email: 'test@example.com',
-            avatar: 'https://via.placeholder.com/150',
-            role: 'admin',
-            createdAt: new Date().toISOString(),
-          }
-        };
-        
-        // 保存令牌和用户信息
-        this.saveToken(mockResponse.token);
-        this.saveUserInfo(mockResponse.user);
-        
-        return mockResponse;
-      }
-      
-      // 模拟登录失败
-      throw new Error('用户名或密码错误');
+      this.saveUserInfo(response.user);
+      return response;
     } catch (error) {
       console.error('登录失败:', error);
-      throw error;
+      throw error instanceof Error ? error : new Error('登录请求失败');
     }
   }
   
@@ -86,25 +79,14 @@ class UserService {
    */
   async register(params: RegisterParams): Promise<UserInfo> {
     try {
-      // TODO: 替换为实际的API调用
-      console.log('注册请求参数:', params);
-      
-      // 模拟API调用
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // 模拟注册成功
-      const mockUser: UserInfo = {
-        id: 'new_' + Date.now(),
-        username: params.username,
-        email: params.email,
-        role: 'user',
-        createdAt: new Date().toISOString(),
-      };
-      
-      return mockUser;
+      // 使用与后端 API 一致的路径
+      // 因为 http.ts 中的响应拦截器已经将 response.data 作为返回值
+      // 所以这里直接得到的就是 UserInfo 对象
+      // 使用 unknown 作为中间类型来解决 TypeScript 类型转换错误
+      return await http.post<UserInfo>('/register', params) as unknown as UserInfo;
     } catch (error) {
       console.error('注册失败:', error);
-      throw error;
+      throw error instanceof Error ? error : new Error('注册请求失败');
     }
   }
   
@@ -114,25 +96,23 @@ class UserService {
    */
   async getUserInfo(): Promise<UserInfo | null> {
     try {
-      const token = this.getToken();
-      if (!token) {
+      // 使用authService获取用户信息
+      const user = await authService.getCurrentUser();
+      if (!user) {
         return null;
       }
       
-      // 从本地存储获取用户信息
-      const userInfo = this.getSavedUserInfo();
-      if (userInfo) {
-        return userInfo;
-      }
+      // 将用户信息转换为UserInfo格式
+      const userInfo: UserInfo = {
+        id: user.id || '',
+        username: user.username,
+        email: user.email || '',
+        avatar: user.avatar,
+        role: user.role || 'user',
+        createdAt: user.createdAt || new Date().toISOString()
+      };
       
-      // TODO: 如果本地没有，则调用API获取
-      // const response = await fetch('/api/user/info', {
-      //   headers: { Authorization: `Bearer ${token}` }
-      // });
-      // const data = await response.json();
-      // return data.user;
-      
-      return null;
+      return userInfo;
     } catch (error) {
       console.error('获取用户信息失败:', error);
       return null;
@@ -143,8 +123,8 @@ class UserService {
    * 退出登录
    */
   logout(): void {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_INFO_KEY);
+    // 使用authService退出登录
+    authService.logout();
   }
   
   /**
@@ -152,15 +132,18 @@ class UserService {
    * @returns boolean
    */
   isLoggedIn(): boolean {
-    return !!this.getToken();
+    return !!authService.getToken();
   }
   
   /**
-   * 保存令牌到本地存储
+   * 保存令牌
    * @param token 令牌
    */
-  private saveToken(token: string): void {
+  saveToken(token: string): void {
+    // 使用authService中的方法存储令牌
     localStorage.setItem(TOKEN_KEY, token);
+    // 设置认证头
+    authService.setAuthHeader(token);
   }
   
   /**
@@ -168,7 +151,15 @@ class UserService {
    * @returns string | null
    */
   getToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    return authService.getToken();
+  }
+  
+  /**
+   * 移除令牌
+   */
+  removeToken(): void {
+    // 使用authService退出登录，它会清除令牌
+    authService.logout();
   }
   
   /**
@@ -196,7 +187,20 @@ class UserService {
       return null;
     }
   }
+
+  /**
+   * 更新用户角色（管理员权限）
+   * @param username 用户名
+   * @param role 新角色 (admin, editor, user)
+   * @returns Promise<{ message: string }>
+   */
+  async updateUserRole(username: string, role: string): Promise<{ message: string }> {
+    // 使用与后端 API 一致的路径
+    // 使用类型断言来处理响应拦截器的返回值
+    // 使用 unknown 作为中间类型来解决 TypeScript 类型转换错误
+    return http.put<{ message: string }>(`/users/${username}/role`, null, { params: { role } }) as unknown as Promise<{ message: string }>
+  }
 }
 
 // 导出单例
-export const userService = new UserService(); 
+export const userService = new UserService();

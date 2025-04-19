@@ -55,13 +55,30 @@
     </NTabs>
 
     <!-- 友链列表 -->
-    <NDataTable
-      :columns="columns"
-      :data="currentLinks"
-      :pagination="pagination"
-      :bordered="false"
-      striped
-    />
+    <NSpin :show="linkStore.loading">
+      <div v-if="linkStore.error" class="error-message">
+        <NAlert type="error">
+          {{ linkStore.error }}
+          <template #action>
+            <NButton text @click="linkStore.loadLinks()">
+              <template #icon>
+                <NIcon><RefreshOutline /></NIcon>
+              </template>
+              重试
+            </NButton>
+          </template>
+        </NAlert>
+      </div>
+      <NEmpty v-else-if="currentLinks.length === 0 && !linkStore.loading" description="暂无友链" />
+      <NDataTable
+        v-else
+        :columns="columns"
+        :data="currentLinks"
+        :pagination="pagination"
+        :bordered="false"
+        striped
+      />
+    </NSpin>
 
     <!-- 创建/编辑友链模态框 -->
     <NModal 
@@ -132,7 +149,11 @@ import {
   NTabs,
   NTabPane,
   NDivider,
+  NSpin,
+  NAlert,
+  NEmpty
 } from 'naive-ui'
+import { RefreshOutline } from '@vicons/ionicons5'
 import NStat from '@/components/NStat.vue'
 import { Add, Search, Create, TrashBin } from '@vicons/ionicons5'
 import type { DataTableColumns, FormInst } from 'naive-ui'
@@ -148,9 +169,8 @@ const activeTab = ref('all')
 
 // 初始加载友链数据
 onMounted(async () => {
-  if (!linkStore.loaded) {
-    await linkStore.loadLinks()
-  }
+  // 无论是否已加载，都重新加载数据以确保数据是最新的
+  await linkStore.loadLinks()
 })
 
 // 表单数据
@@ -436,45 +456,54 @@ const handleDelete = async (id: number) => {
 
 // 处理表单提交
 const handleSubmit = () => {
-  formRef.value?.validate(async (errors) => {
+  formRef.value?.validate((errors) => {
     if (!errors) {
-      let success = false
-      
       if (editingLink.value) {
         // 编辑友链
-        success = await linkStore.updateLink(editingLink.value.id, formValue.value)
-        if (success) {
-          message.success('友链已更新')
-        }
+        linkStore.updateLink(editingLink.value.id, formValue.value)
+          .then(() => {
+            message.success('友链已更新')
+            showCreateModal.value = false
+            // 重置表单
+            resetForm()
+          })
+          .catch(() => {
+            message.error('更新友链失败')
+          })
       } else {
         // 创建新友链
-        success = await linkStore.addLink(formValue.value)
-        if (success) {
-          message.success('友链已创建')
-        }
-      }
-      
-      if (success) {
-        showCreateModal.value = false
-        formValue.value = {
-          name: '',
-          url: '',
-          icon: '',
-          description: '',
-          status: 'pending'
-        }
-        editingLink.value = null
-      } else {
-        message.error('操作失败')
+        linkStore.addLink(formValue.value)
+          .then(() => {
+            message.success('友链已创建')
+            showCreateModal.value = false
+            // 重置表单
+            resetForm()
+          })
+          .catch(() => {
+            message.error('创建友链失败')
+          })
       }
     }
   })
 }
 
-// 重置友链数据
+// 重置数据
 const handleReset = () => {
-  linkStore.resetToDefault()
-  message.success('友链数据已重置')
+  linkStore.$reset()
+  linkStore.loadLinks()
+  message.success('数据已重置')
+}
+
+// 重置表单
+const resetForm = () => {
+  formValue.value = {
+    name: '',
+    url: '',
+    icon: '',
+    description: '',
+    status: 'pending'
+  }
+  editingLink.value = null
 }
 
 // 添加状态选项
@@ -483,6 +512,27 @@ const statusOptions = [
   { label: '待审核', value: 'pending' },
   { label: '已拒绝', value: 'rejected' }
 ]
+
+// 加载状态
+const isLoading = ref(false)
+
+// 错误消息
+const errorMessage = ref('')
+
+// 加载友链数据
+const loadLinks = async () => {
+  isLoading.value = true
+  try {
+    await linkStore.loadLinks()
+  } catch (error) {
+    errorMessage.value = '加载友链数据失败'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 加载友链数据
+loadLinks()
 </script>
 
 <style scoped>
@@ -490,16 +540,24 @@ const statusOptions = [
   width: 100%;
 }
 
+.header-actions {
+  margin-bottom: 16px;
+}
+
+.links-tabs {
+  margin-bottom: 16px;
+}
+
 .stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .stat-value {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: bold;
 }
 
 .success {
@@ -514,11 +572,12 @@ const statusOptions = [
   color: #d03050;
 }
 
-.header-actions {
+.error-message {
   margin-bottom: 16px;
 }
 
-.links-tabs {
+.loading {
+  text-align: center;
   margin-bottom: 16px;
 }
 
@@ -539,4 +598,4 @@ const statusOptions = [
     grid-template-columns: repeat(2, 1fr);
   }
 }
-</style> 
+</style>

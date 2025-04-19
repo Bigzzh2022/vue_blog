@@ -34,15 +34,32 @@
       </NSpace>
 
       <!-- 分类列表 -->
-      <NDataTable
-        :columns="columns"
-        :data="filteredCategories"
-        :pagination="pagination"
-        :bordered="false"
-        :row-key="row => row.id"
-        @update:checked-row-keys="handleCheck"
-        :checked-row-keys="selectedRowKeys"
-      />
+      <NSpin :show="loading">
+        <div v-if="error" class="error-message">
+          <NAlert type="error">
+            {{ error }}
+            <template #action>
+              <NButton text @click="loadCategories">
+                <template #icon>
+                  <NIcon><RefreshOutline /></NIcon>
+                </template>
+                重试
+              </NButton>
+            </template>
+          </NAlert>
+        </div>
+        <NEmpty v-else-if="filteredCategories.length === 0 && !loading" description="暂无分类" />
+        <NDataTable
+          v-else
+          :columns="columns"
+          :data="filteredCategories"
+          :pagination="pagination"
+          :bordered="false"
+          :row-key="row => row.id"
+          @update:checked-row-keys="handleCheck"
+          :checked-row-keys="selectedRowKeys"
+        />
+      </NSpin>
     </NSpace>
 
     <!-- 创建/编辑分类模态框 -->
@@ -122,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed } from 'vue'
+import { h, ref, computed, onMounted } from 'vue'
 import { 
   NSpace, 
   NButton, 
@@ -134,7 +151,10 @@ import {
   NFormItem,
   NSelect,
   NPopconfirm,
-  useMessage
+  useMessage,
+  NSpin,
+  NAlert,
+  NEmpty
 } from 'naive-ui'
 import type { DataTableColumns, FormInst } from 'naive-ui'
 import { Add, Search, Create, TrashBin } from '@vicons/ionicons5'
@@ -142,6 +162,8 @@ import type { OnUpdateCheckedRowKeys, RowKey } from 'naive-ui/es/data-table/src/
 import RecycleBin from '@/components/RecycleBin.vue'
 import type { RecycleBinItem } from '@/types/recycle-bin'
 import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
+import { RefreshOutline } from '@vicons/ionicons5'
+import { adminService } from '@/services/adminService'
 
 interface Category {
   id: number
@@ -196,33 +218,46 @@ const rules = {
 // 模态框标题
 const modalTitle = computed(() => editingCategory.value ? '编辑分类' : '新建分类')
 
-// 模拟分类数据
-const categories = ref<Category[]>([
-  {
-    id: 1,
-    name: '技术',
-    slug: 'tech',
-    parentId: null,
-    count: 25,
-    createTime: '2024-01-15'
-  },
-  {
-    id: 2,
-    name: '前端',
-    slug: 'frontend',
-    parentId: 1,
-    count: 18,
-    createTime: '2024-01-14'
-  },
-  {
-    id: 3,
-    name: '生活',
-    slug: 'life',
-    parentId: null,
-    count: 15,
-    createTime: '2024-01-13'
+// 分类数据
+const categories = ref<Category[]>([])
+
+// 加载状态
+const loading = ref(false)
+
+// 错误信息
+const error = ref<string | null>(null)
+
+// 加载分类数据
+const loadCategories = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const response = await adminService.getCategories()
+    // 先初始化分类数据
+    categories.value = response.map((category: any, index: number) => ({
+      id: index + 1,
+      name: category.name,
+      slug: category.slug || category.name.toLowerCase().replace(/\s+/g, '-'),
+      parentId: category.parentId || null,
+      count: 0, // 先初始化为0
+      createTime: category.createTime || new Date().toISOString().split('T')[0]
+    }))
+    // 前端统计每个分类下已发布文章数
+    await Promise.all(categories.value.map(async (category) => {
+      try {
+        const articles = await import('@/services/articleService').then(m => m.articleService.getPosts({ category: category.name, status: 'published' }))
+        category.count = Array.isArray(articles) ? articles.length : 0
+      } catch (err) {
+        console.error(`获取分类 ${category.name} 的文章数量失败:`, err)
+      }
+    }))
+  } catch (err) {
+    console.error('加载分类数据失败:', err)
+    error.value = '加载分类数据失败，请稍后重试'
+  } finally {
+    loading.value = false
   }
-])
+}
 
 // 父分类选项
 const parentOptions = computed<SelectMixedOption[]>(() => {
@@ -335,6 +370,11 @@ const filteredCategories = computed(() => {
   )
 })
 
+// 页面加载时获取分类数据
+onMounted(() => {
+  loadCategories()
+})
+
 // 处理选中
 const handleCheck: OnUpdateCheckedRowKeys = (keys: RowKey[]) => {
   selectedRowKeys.value = keys
@@ -352,82 +392,115 @@ const handleEdit = (category: Category) => {
 }
 
 // 处理删除
-const handleDelete = (category: Category) => {
-  if (category.count > 0) {
-    message.warning('该分类下还有文章，不能直接删除')
-    return
+const handleDelete = async (category: Category) => {
+  try {
+    loading.value = true
+    await adminService.deleteCategory(category.name)
+    
+    // 将删除的分类添加到回收站
+    const deletedCategory: DeletedCategory = {
+      ...category,
+      type: 'category',
+      deleteTime: new Date().toLocaleString()
+    }
+    categories.value = categories.value.filter(c => c.id !== category.id)
+    deletedCategories.value.push(deletedCategory)
+    message.success('分类已删除')
+  } catch (err) {
+    console.error('删除分类失败:', err)
+    message.error('删除分类失败，请稍后重试')
+  } finally {
+    loading.value = false
   }
-  
-  const deletedCategory: DeletedCategory = {
-    ...category,
-    type: 'category',
-    deleteTime: new Date().toLocaleString()
-  }
-  categories.value = categories.value.filter(c => c.id !== category.id)
-  deletedCategories.value.push(deletedCategory)
-  message.success('分类已删除')
 }
 
 // 处理批量删除
-const handleBatchDelete = () => {
+const handleBatchDelete = async () => {
   if (selectedRowKeys.value.length === 0) {
     message.warning('请选择要删除的分类')
     return
   }
   
-  const hasArticles = categories.value.some(
-    category => selectedRowKeys.value.includes(category.id.toString()) && category.count > 0
-  )
-  
-  if (hasArticles) {
-    message.warning('选中的分类中有包含文章的分类，不能删除')
-    return
+  try {
+    loading.value = true
+    const selectedCategories = categories.value.filter(category => selectedRowKeys.value.includes(category.id))
+    
+    // 并行删除所有选中的分类
+    const deletePromises = selectedCategories.map(category => adminService.deleteCategory(category.name))
+    await Promise.all(deletePromises)
+    
+    // 将删除的分类添加到回收站
+    const deletedCategoriesToAdd = selectedCategories.map(category => ({
+      ...category,
+      type: 'category' as const,
+      deleteTime: new Date().toLocaleString()
+    }))
+    deletedCategories.value.push(...deletedCategoriesToAdd)
+    
+    // 从列表中移除
+    categories.value = categories.value.filter(category => !selectedRowKeys.value.includes(category.id))
+    
+    const count = selectedRowKeys.value.length
+    selectedRowKeys.value = []
+    message.success(`已删除 ${count} 个分类`)
+  } catch (err) {
+    console.error('批量删除分类失败:', err)
+    message.error('批量删除分类失败，请稍后重试')
+  } finally {
+    loading.value = false
   }
-  
-  categories.value = categories.value.filter(
-    category => !selectedRowKeys.value.includes(category.id.toString())
-  )
-  selectedRowKeys.value = []
-  message.success(`已删除 ${selectedRowKeys.value.length} 个分类`)
 }
 
 // 处理表单提交
-const handleSubmit = () => {
-  formRef.value?.validate((errors) => {
+const handleSubmit = async () => {
+  formRef.value?.validate(async (errors) => {
     if (!errors) {
-      if (editingCategory.value) {
-        // 编辑分类
-        const index = categories.value.findIndex(c => c.id === editingCategory.value!.id)
-        if (index !== -1) {
-          categories.value[index] = {
-            ...editingCategory.value,
+      try {
+        loading.value = true
+        
+        if (editingCategory.value) {
+          // 编辑分类 - 先删除旧分类，再创建新分类
+          await adminService.deleteCategory(editingCategory.value.name)
+          await adminService.createCategory({ 
             name: formValue.value.name,
-            slug: formValue.value.slug,
             parentId: formValue.value.parentId
+          })
+          
+          const index = categories.value.findIndex(c => c.id === editingCategory.value!.id)
+          if (index !== -1) {
+            categories.value[index] = {
+              ...editingCategory.value,
+              name: formValue.value.name,
+              slug: formValue.value.slug,
+              parentId: formValue.value.parentId
+            }
           }
           message.success('分类已更新')
+        } else {
+          // 创建新分类
+          await adminService.createCategory({ 
+            name: formValue.value.name,
+            parentId: formValue.value.parentId
+          })
+          
+          // 重新加载分类列表以获取最新数据
+          await loadCategories()
+          message.success('分类已创建')
         }
-      } else {
-        // 创建新分类
-        const newCategory: Category = {
-          id: Math.max(...categories.value.map(c => c.id)) + 1,
-          name: formValue.value.name,
-          slug: formValue.value.slug,
-          parentId: formValue.value.parentId,
-          count: 0,
-          createTime: new Date().toLocaleDateString()
+        
+        showCreateModal.value = false
+        formValue.value = {
+          name: '',
+          slug: '',
+          parentId: null
         }
-        categories.value.unshift(newCategory)
-        message.success('分类已创建')
+        editingCategory.value = null
+      } catch (err) {
+        console.error('保存分类失败:', err)
+        message.error('保存分类失败，请稍后重试')
+      } finally {
+        loading.value = false
       }
-      
-      showCreateModal.value = false
-      formValue.value = {
-        name: '',
-        slug: '',
-        parentId: null
-      }
-      editingCategory.value = null
     }
   })
 }
@@ -489,23 +562,61 @@ const showRecycleBin = ref(false)
 const deletedCategories = ref<DeletedCategory[]>([])
 
 // 处理恢复
-const restoreCategory = (item: RecycleBinItem) => {
+const restoreCategory = async (item: RecycleBinItem) => {
   if (item.type !== 'category') return
-  const category = item as DeletedCategory
-  const { deleteTime, type, ...restCategory } = category
-  categories.value.push(restCategory)
-  deletedCategories.value = deletedCategories.value.filter(c => c.id !== category.id)
-  message.success('分类已恢复')
+  
+  try {
+    loading.value = true
+    const category = item as DeletedCategory
+    
+    // 创建分类
+    await adminService.createCategory({ 
+      name: category.name,
+      parentId: category.parentId
+    })
+    
+    // 从回收站移除并添加回列表
+    const { deleteTime, type, ...restCategory } = category
+    categories.value.push(restCategory)
+    deletedCategories.value = deletedCategories.value.filter(c => c.id !== category.id)
+    
+    message.success('分类已恢复')
+  } catch (err) {
+    console.error('恢复分类失败:', err)
+    message.error('恢复分类失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
 }
 
 // 处理恢复全部
-const restoreAllCategories = () => {
-  deletedCategories.value.forEach(category => {
-    const { deleteTime, type, ...restCategory } = category
-    categories.value.push(restCategory)
-  })
-  deletedCategories.value = []
-  message.success('已恢复全部分类')
+const restoreAllCategories = async () => {
+  try {
+    loading.value = true
+    
+    // 并行创建所有分类
+    const createPromises = deletedCategories.value.map(category => 
+      adminService.createCategory({ 
+        name: category.name,
+        parentId: category.parentId
+      })
+    )
+    await Promise.all(createPromises)
+    
+    // 将所有分类添加回分类列表
+    const restoredCategories = deletedCategories.value.map(({ deleteTime, type, ...restCategory }) => restCategory)
+    categories.value = [...categories.value, ...restoredCategories]
+    
+    // 清空删除列表
+    deletedCategories.value = []
+    
+    message.success('所有分类已恢复')
+  } catch (err) {
+    console.error('恢复所有分类失败:', err)
+    message.error('恢复所有分类失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
 }
 
 // 处理永久删除
@@ -521,11 +632,16 @@ const clearRecycleBin = () => {
   deletedCategories.value = []
   message.success('回收站已清空')
 }
+
 </script>
 
 <style scoped>
 .categories-manage {
   width: 100%;
+}
+
+.error-message {
+  margin-bottom: 16px;
 }
 
 :deep(.n-data-table .n-data-table-td) {
@@ -544,13 +660,6 @@ const clearRecycleBin = () => {
   padding: 24px !important;
 }
 
-:deep(.n-form-item .n-form-item-feedback-wrapper) {
-  min-height: 22px;
-}
-
-:deep(.n-form-item) {
-  margin-bottom: 24px;
-}
 
 :deep(.n-form-item:last-child) {
   margin-bottom: 0;

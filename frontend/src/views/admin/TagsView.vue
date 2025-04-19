@@ -34,15 +34,32 @@
       </NSpace>
 
       <!-- 标签列表 -->
-      <NDataTable
-        :columns="columns"
-        :data="filteredTags"
-        :pagination="pagination"
-        :bordered="false"
-        :row-key="row => row.id"
-        @update:checked-row-keys="handleCheck"
-        :checked-row-keys="selectedRowKeys"
-      />
+      <NSpin :show="loading">
+        <div v-if="error" class="error-message">
+          <NAlert type="error">
+            {{ error }}
+            <template #action>
+              <NButton text @click="loadTags">
+                <template #icon>
+                  <NIcon><RefreshOutline /></NIcon>
+                </template>
+                重试
+              </NButton>
+            </template>
+          </NAlert>
+        </div>
+        <NEmpty v-else-if="filteredTags.length === 0 && !loading" description="暂无标签" />
+        <NDataTable
+          v-else
+          :columns="columns"
+          :data="filteredTags"
+          :pagination="pagination"
+          :bordered="false"
+          :row-key="row => row.id"
+          @update:checked-row-keys="handleCheck"
+          :checked-row-keys="selectedRowKeys"
+        />
+      </NSpin>
     </NSpace>
 
     <!-- 创建/编辑标签模态框 -->
@@ -100,7 +117,7 @@
       :show="showRecycleBin"
       @update:show="showRecycleBin = $event"
       type="tag"
-      :items="deletedTags.map(tag => ({ ...tag, type: 'tag' }))"
+      :items="deletedTags.map(tag => ({ ...(tag as any), type: 'tag' }))"
       @restore="restoreTag"
       @restore-all="restoreAllTags"
       @delete="permanentlyDeleteTag"
@@ -110,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed } from 'vue'
+import { h, ref, computed, onMounted } from 'vue'
 import { 
   NSpace, 
   NButton, 
@@ -123,13 +140,17 @@ import {
   NSelect,
   NTag,
   NPopconfirm,
-  useMessage
+  useMessage,
+  NSpin,
+  NAlert,
+  NEmpty
 } from 'naive-ui'
 import type { DataTableColumns, FormInst } from 'naive-ui'
-import { Add, Search, Create, TrashBin } from '@vicons/ionicons5'
+import { Add, Search, Create, TrashBin, RefreshOutline } from '@vicons/ionicons5'
 import type { OnUpdateCheckedRowKeys, RowKey } from 'naive-ui/es/data-table/src/interface'
 import RecycleBin from '@/components/RecycleBin.vue'
 import type { RecycleBinItem } from '@/types/recycle-bin'
+import adminService from '@/services/adminService'
 
 interface Tag {
   id: number
@@ -182,30 +203,48 @@ const rules = {
 // 模态框标题
 const modalTitle = computed(() => editingTag.value ? '编辑标签' : '新建标签')
 
-// 模拟标签数据
-const tags = ref<Tag[]>([
-  {
-    id: 1,
-    name: 'Vue',
-    slug: 'vue',
-    count: 25,
-    createTime: '2024-01-15'
-  },
-  {
-    id: 2,
-    name: 'React',
-    slug: 'react',
-    count: 18,
-    createTime: '2024-01-14'
-  },
-  {
-    id: 3,
-    name: 'TypeScript',
-    slug: 'typescript',
-    count: 15,
-    createTime: '2024-01-13'
+// 标签数据
+const tags = ref<Tag[]>([])
+
+// 加载状态
+const loading = ref(false)
+
+// 错误信息
+const error = ref<string | null>(null)
+
+// 加载标签数据
+const loadTags = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const response = await adminService.getTags()
+    // 先初始化标签数据
+    tags.value = response.map((tag: any, index: number) => ({
+      id: index + 1,
+      name: tag.name,
+      slug: tag.name.toLowerCase().replace(/\s+/g, '-'),
+      count: 0, // 先初始化为0
+      createTime: tag.createTime || new Date().toISOString().split('T')[0]
+    }))
+    // 前端统计每个标签下已发布文章数
+    await Promise.all(tags.value.map(async (tag) => {
+      try {
+        // 只支持 category, 这里获取全部已发布文章后前端筛选包含该标签的
+        const articles = await import('@/services/articleService').then(m => m.articleService.getPosts({ status: 'published' }))
+        tag.count = Array.isArray(articles)
+          ? articles.filter((a: any) => Array.isArray(a.tags) && a.tags.includes(tag.name)).length
+          : 0
+      } catch (err) {
+        console.error(`获取标签 ${tag.name} 的文章数量失败:`, err)
+      }
+    }))
+  } catch (err) {
+    console.error('加载标签数据失败:', err)
+    error.value = '加载标签数据失败，请稍后重试'
+  } finally {
+    loading.value = false
   }
-])
+}
 
 // 表格列配置
 const columns: DataTableColumns<Tag> = [
@@ -307,63 +346,106 @@ const handleEdit = (tag: Tag) => {
 }
 
 // 处理删除
-const handleDelete = (tag: Tag) => {
-  const deletedTag: DeletedTag = {
-    ...tag,
-    type: 'tag',
-    deleteTime: new Date().toLocaleString()
+const handleDelete = async (tag: Tag) => {
+  try {
+    loading.value = true
+    await adminService.deleteTag(tag.name)
+    
+    const deletedTag: DeletedTag = {
+      ...tag,
+      type: 'tag',
+      deleteTime: new Date().toLocaleString()
+    }
+    tags.value = tags.value.filter(t => t.id !== tag.id)
+    deletedTags.value.push(deletedTag)
+    message.success('标签已删除')
+  } catch (err) {
+    console.error('删除标签失败:', err)
+    message.error('删除标签失败，请稍后重试')
+  } finally {
+    loading.value = false
   }
-  tags.value = tags.value.filter(t => t.id !== tag.id)
-  deletedTags.value.push(deletedTag)
-  message.success('标签已删除')
 }
 
 // 处理批量删除
-const handleBatchDelete = () => {
+const handleBatchDelete = async () => {
   if (selectedRowKeys.value.length === 0) {
     message.warning('请选择要删除的标签')
     return
   }
   
-  tags.value = tags.value.filter(tag => !selectedRowKeys.value.includes(tag.id.toString()))
-  selectedRowKeys.value = []
-  message.success(`已删除 ${selectedRowKeys.value.length} 个标签`)
+  try {
+    loading.value = true
+    const selectedTags = tags.value.filter(tag => selectedRowKeys.value.includes(tag.id))
+    
+    // 并行删除所有选中的标签
+    const deletePromises = selectedTags.map(tag => adminService.deleteTag(tag.name))
+    await Promise.all(deletePromises)
+    
+    // 将删除的标签添加到回收站
+    const deletedTagsToAdd = selectedTags.map(tag => ({
+      ...tag,
+      type: 'tag' as const,
+      deleteTime: new Date().toLocaleString()
+    }))
+    deletedTags.value.push(...deletedTagsToAdd)
+    
+    // 从列表中移除
+    tags.value = tags.value.filter(tag => !selectedRowKeys.value.includes(tag.id))
+    
+    const count = selectedRowKeys.value.length
+    selectedRowKeys.value = []
+    message.success(`已删除 ${count} 个标签`)
+  } catch (err) {
+    console.error('批量删除标签失败:', err)
+    message.error('批量删除标签失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
 }
 
 // 处理表单提交
-const handleSubmit = () => {
-  formRef.value?.validate((errors) => {
+const handleSubmit = async () => {
+  formRef.value?.validate(async (errors) => {
     if (!errors) {
-      if (editingTag.value) {
-        // 编辑标签
-        const index = tags.value.findIndex(t => t.id === editingTag.value!.id)
-        if (index !== -1) {
-          tags.value[index] = {
-            ...editingTag.value,
-            name: formValue.value.name,
-            slug: formValue.value.slug
+      try {
+        loading.value = true
+        
+        if (editingTag.value) {
+          // 编辑标签 - 先删除旧标签，再创建新标签
+          await adminService.deleteTag(editingTag.value.name)
+          await adminService.createTag({ name: formValue.value.name })
+          
+          const index = tags.value.findIndex(t => t.id === editingTag.value!.id)
+          if (index !== -1) {
+            tags.value[index] = {
+              ...editingTag.value,
+              name: formValue.value.name,
+              slug: formValue.value.slug
+            }
           }
           message.success('标签已更新')
+        } else {
+          // 创建新标签
+          await adminService.createTag({ name: formValue.value.name })
+          
+          // 重新加载标签列表以获取最新数据
+          await loadTags()
+          message.success('标签已创建')
         }
-      } else {
-        // 创建新标签
-        const newTag: Tag = {
-          id: Math.max(...tags.value.map(t => t.id)) + 1,
-          name: formValue.value.name,
-          slug: formValue.value.slug,
-          count: 0,
-          createTime: new Date().toLocaleDateString()
+        
+        showCreateModal.value = false
+        formValue.value = {
+          name: '',
+          slug: ''
         }
-        tags.value.unshift(newTag)
-        message.success('标签已创建')
+        editingTag.value = null
+      } catch (err) {
+        console.error('保存标签失败:', err)
+        message.error('保存标签失败，请稍后重试')
+      } finally {
+        loading.value = false
       }
-      
-      showCreateModal.value = false
-      formValue.value = {
-        name: '',
-        slug: ''
-      }
-      editingTag.value = null
     }
   })
 }
@@ -428,40 +510,95 @@ const showRecycleBin = ref(false)
 const deletedTags = ref<(Tag & { deleteTime: string })[]>([])
 
 // 处理恢复
-const restoreTag = (item: RecycleBinItem) => {
+const restoreTag = async (item: RecycleBinItem) => {
   if (item.type !== 'tag') return
-  const tag = item as DeletedTag
-  const { deleteTime, type, ...restTag } = tag
-  tags.value.push(restTag)
-  deletedTags.value = deletedTags.value.filter(t => t.id !== tag.id)
+  
+  try {
+    loading.value = true
+    const tag = item as DeletedTag
+    
+    // 创建标签
+    await adminService.createTag({ name: tag.name })
+    
+    // 从回收站移除并添加回列表
+    const { deleteTime, type, ...restTag } = tag
+    tags.value.push(restTag)
+    deletedTags.value = deletedTags.value.filter(t => t.id !== tag.id)
+    
+    message.success('标签已恢复')
+  } catch (err) {
+    console.error('恢复标签失败:', err)
+    message.error('恢复标签失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
 }
 
 // 处理恢复全部
-const restoreAllTags = () => {
-  // 将所有标签添加回标签列表
-  tags.value = [...tags.value, ...deletedTags.value]
-  // 清空删除列表
-  deletedTags.value = []
+const restoreAllTags = async () => {
+  try {
+    loading.value = true
+    
+    // 并行创建所有标签
+    const createPromises = deletedTags.value.map(tag => 
+      adminService.createTag({ name: tag.name })
+    )
+    await Promise.all(createPromises)
+    
+    // 将所有标签添加回标签列表
+    const restoredTags = deletedTags.value.map((tag) => {
+  // 移除 deleteTime 和 type 字段，保留其他属性
+  const { deleteTime, type, ...restTag } = tag
+  return restTag as Tag
+})
+    tags.value = [...tags.value, ...restoredTags]
+    
+    // 清空删除列表
+    deletedTags.value = []
+    
+    message.success('所有标签已恢复')
+  } catch (err) {
+    console.error('恢复所有标签失败:', err)
+    message.error('恢复所有标签失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
 }
 
 // 处理永久删除
-const permanentlyDeleteTag = (item: RecycleBinItem) => {
+const permanentlyDeleteTag = async (item: RecycleBinItem) => {
   if (item.type !== 'tag') return
-  const tag = item as DeletedTag
-  deletedTags.value = deletedTags.value.filter(t => t.id !== tag.id)
-  message.success('标签已永久删除')
+  
+  try {
+    const tag = item as DeletedTag
+    deletedTags.value = deletedTags.value.filter(t => t.id !== tag.id)
+    message.success('标签已永久删除')
+  } catch (err) {
+    console.error('永久删除标签失败:', err)
+    message.error('永久删除标签失败，请稍后重试')
+  }
 }
 
 // 处理清空回收站
 const clearRecycleBin = () => {
   // 清空删除列表
   deletedTags.value = []
+  message.success('回收站已清空')
 }
+
+// 页面加载时获取标签数据
+onMounted(() => {
+  loadTags()
+})
 </script>
 
 <style scoped>
 .tags-manage {
   width: 100%;
+}
+
+.error-message {
+  margin-bottom: 16px;
 }
 
 :deep(.n-data-table .n-data-table-td) {

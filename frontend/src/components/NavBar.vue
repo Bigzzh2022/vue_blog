@@ -63,6 +63,22 @@
               </div>
             </div>
             <div class="menu-right">
+              <!-- 用户下拉菜单 -->
+              <div v-if="isLoggedIn && !isAdmin" class="nav-item user-dropdown" ref="userDropdownRef">
+                <div class="user-icon" @click="toggleUserDropdown">
+                  <font-awesome-icon :icon="['fas', 'user']" />
+                </div>
+                <div v-if="showUserDropdown" class="dropdown-menu">
+                  <div class="dropdown-item" @click="router.push('/profile')">
+                    <font-awesome-icon :icon="['fas', 'user-circle']" />
+                    个人资料
+                  </div>
+                  <div class="dropdown-item" @click="handleLogout">
+                    <font-awesome-icon :icon="['fas', 'sign-out-alt']" />
+                    退出登录
+                  </div>
+                </div>
+              </div>
               <div class="nav-item search-btn" @click="activateSearch">
                 <font-awesome-icon :icon="['fas', 'search']" />
               </div>
@@ -90,7 +106,9 @@ import {
   faSearch,
   faBookOpen,
   faXmark,
-  faGear
+  faGear,
+  faUserCircle,
+  faSignOutAlt
 } from '@fortawesome/free-solid-svg-icons'
 
 library.add(
@@ -102,7 +120,9 @@ library.add(
   faSearch,
   faBookOpen,
   faXmark,
-  faGear
+  faGear,
+  faUserCircle,
+  faSignOutAlt
 )
 
 // 监听暗色模式
@@ -129,6 +149,38 @@ const { isLoggedIn, isAdmin } = storeToRefs(userStore)
 
 // 搜索相关状态
 const isSearchActive = ref(false)
+
+// 用户下拉菜单状态
+const showUserDropdown = ref(false)
+const userDropdownRef = ref<HTMLElement | null>(null)
+
+// 切换用户下拉菜单
+const toggleUserDropdown = () => {
+  showUserDropdown.value = !showUserDropdown.value
+}
+
+// 处理退出登录
+const handleLogout = () => {
+  userStore.logout()
+  router.push('/login')
+  showUserDropdown.value = false
+}
+
+// 点击外部关闭下拉菜单
+const handleClickOutside = (event: MouseEvent) => {
+  if (userDropdownRef.value && !userDropdownRef.value.contains(event.target as Node)) {
+    showUserDropdown.value = false
+  }
+}
+
+// 添加和移除点击外部关闭下拉菜单的事件监听
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
 const searchQuery = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
 
@@ -198,7 +250,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 }
 
-// 根据登录状态动态生成导航项
+// 根据登录状态和角色动态生成导航项
 const navItems = computed(() => {
   const items = [
     { path: '/', text: '主页', icon: ['fas', 'house'] },
@@ -207,12 +259,15 @@ const navItems = computed(() => {
     { path: '/categories', text: '分类', icon: ['fas', 'list'] },
   ]
   
-  // 如果用户已登录，显示"后台"按钮，否则显示"登录"按钮
-  if (isLoggedIn.value) {
-    items.push({ path: '/admin/dashboard', text: '后台', icon: ['fas', 'gear'] })
-  } else {
+  // 根据用户角色显示不同按钮
+  if (!isLoggedIn.value) {
+    // 未登录用户显示“登录”按钮
     items.push({ path: '/login', text: '登录', icon: ['fas', 'user'] })
+  } else if (isAdmin.value) {
+    // 管理员显示“后台”按钮
+    items.push({ path: '/admin/dashboard', text: '后台', icon: ['fas', 'gear'] })
   }
+  // 普通用户不添加额外按钮，而是在右侧显示用户图标和下拉菜单
   
   return items
 })
@@ -621,6 +676,61 @@ onUnmounted(() => {
 .fade-scale-leave-to {
   opacity: 0;
   transform: scale(0.98); /* 简化变换 */
+}
+
+/* 用户下拉菜单样式 */
+.user-dropdown {
+  position: relative;
+}
+
+.user-icon {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 150px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 8px 0;
+  z-index: 100;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.dark-mode .dropdown-menu {
+  background: #1f2937;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  color: #333;
+  font-size: 14px;
+}
+
+.dark-mode .dropdown-item {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dropdown-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.dark-mode .dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* 修改响应式布局 */

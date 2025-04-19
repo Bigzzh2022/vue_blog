@@ -5,14 +5,25 @@
       <p class="search-info">关键词: "{{ searchQuery }}"</p>
     </div>
     
-    <div class="search-results" v-if="searchResults.length">
+    <div v-if="loading" class="loading-state">
+      <n-spin size="medium" />
+      <p>搜索中...</p>
+    </div>
+    
+    <div v-else-if="error" class="error-state">
+      <p>{{ error }}</p>
+      <n-button @click="performSearch">重试</n-button>
+    </div>
+    
+    <div class="search-results" v-else-if="searchResults.length">
       <div v-for="result in searchResults" :key="result.id" class="search-item">
         <router-link :to="'/article/' + result.id" class="result-link">
           <h2 class="result-title">{{ result.title }}</h2>
-          <p class="result-excerpt">{{ result.excerpt }}</p>
+          <p class="result-excerpt">{{ result.description }}</p>
           <div class="result-meta">
-            <span class="result-date">{{ formatDate(result.date) }}</span>
+            <span class="result-date">{{ formatDate(result.publishDate) }}</span>
             <span class="result-category">{{ result.category }}</span>
+            <span class="result-views">阅读量: {{ result.views }}</span>
           </div>
         </router-link>
       </div>
@@ -31,18 +42,17 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { searchService } from '@/services/searchService'
+import type { Post } from '@/services/articleService'
+import { NEmpty, NButton, NSpin } from 'naive-ui'
 
-interface SearchResult {
-  id: number
-  title: string
-  excerpt: string
-  date: Date
-  category: string
-}
+// 使用后端的Post接口代替本地的SearchResult接口
 
 const route = useRoute()
 const searchQuery = ref('')
-const searchResults = ref<SearchResult[]>([])
+const searchResults = ref<Post[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 
 // 监听路由参数变化
 watch(
@@ -58,22 +68,26 @@ watch(
 
 // 执行搜索
 const performSearch = async () => {
-  // 这里添加实际的搜索逻辑
-  // 示例数据
-  searchResults.value = [
-    {
-      id: 1,
-      title: '在Vue3中使用TypeScript的最佳实践',
-      excerpt: 'TypeScript已经成为现代前端开发中不可或缺的工具。在Vue3项目中正确使用TypeScript不仅可以提高代码质量，还能获得更好的开发体验。',
-      date: new Date('2024-01-15'),
-      category: '前端开发'
-    },
-    // 更多搜索结果...
-  ]
+  if (!searchQuery.value) return
+  
+  loading.value = true
+  error.value = null
+  searchResults.value = []
+  
+  try {
+    // 调用搜索服务
+    const response = await searchService.searchPosts({ q: searchQuery.value })
+    searchResults.value = Array.isArray(response) ? response : []
+  } catch (err) {
+    console.error('搜索失败:', err)
+    error.value = '搜索失败，请稍后重试'
+  } finally {
+    loading.value = false
+  }
 }
 
 // 格式化日期
-const formatDate = (date: Date) => {
+const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'long',

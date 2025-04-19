@@ -16,6 +16,12 @@ const routes: Array<RouteRecordRaw> = [
     component: HomeView
   },
   {
+    path: '/profile',
+    name: 'profile',
+    component: () => import('../views/ProfileView.vue'),
+    meta: { title: '个人资料', requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'login',
     component: LoginView,

@@ -1,65 +1,66 @@
 <template>
-  <n-layout has-sider class="admin-layout">
-    <n-layout-sider
-      bordered
-      collapse-mode="width"
-      :collapsed-width="64"
-      :width="240"
-      :collapsed="collapsed"
-      show-trigger
-      @collapse="collapsed = true"
-      @expand="collapsed = false"
-      class="admin-sider"
-    >
-      <div class="logo">
-        <n-dropdown :options="logoUserOptions" trigger="click" @select="handleLogoSelect">
-          <n-avatar
-            round
-            size="medium"
-            src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg"
-            class="user-avatar"
-          />
-        </n-dropdown>
-      </div>
-      <n-menu
-        :collapsed="collapsed"
+  <n-dialog-provider>
+    <n-layout has-sider class="admin-layout">
+      <n-layout-sider
+        bordered
+        collapse-mode="width"
         :collapsed-width="64"
-        :collapsed-icon-size="22"
-        :options="menuOptions"
-        :value="activeKey"
-        class="admin-menu"
-      />
-    </n-layout-sider>
-    <n-layout class="admin-content">
-      <n-layout-header bordered class="admin-header">
-        <div class="header-container">
-          <div class="header-left">
-            <n-breadcrumb>
-              <n-breadcrumb-item>后台管理</n-breadcrumb-item>
-              <n-breadcrumb-item>{{ currentRoute }}</n-breadcrumb-item>
-            </n-breadcrumb>
-          </div>
-          <div class="header-right">
-            <n-space>
-             
-              <n-dropdown :options="userOptions" trigger="click" @select="handleSelect">
-                <n-button text>
-                  <n-icon size="16">
-                    <setting-outlined />
-                  </n-icon>
-                </n-button>
-              </n-dropdown>
-            </n-space>
-          </div>
+        :width="240"
+        :collapsed="collapsed"
+        show-trigger
+        @collapse="collapsed = true"
+        @expand="collapsed = false"
+        class="admin-sider"
+      >
+        <div class="logo">
+          <n-dropdown :options="logoUserOptions" trigger="click" @select="handleLogoSelect">
+            <n-avatar
+              round
+              size="medium"
+              src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg"
+              class="user-avatar"
+            />
+          </n-dropdown>
         </div>
-      </n-layout-header>
-      <n-layout-content class="admin-main">
-        <div class="content-container">
-          <router-view></router-view>
-        </div>
-      </n-layout-content>
+        <n-menu
+          :collapsed="collapsed"
+          :collapsed-width="64"
+          :collapsed-icon-size="22"
+          :options="menuOptions"
+          :value="activeKey"
+          class="admin-menu"
+        />
+      </n-layout-sider>
+      <n-layout class="admin-content">
+        <n-layout-header bordered class="admin-header">
+          <div class="header-container">
+            <div class="header-left">
+              <n-breadcrumb>
+                <n-breadcrumb-item>后台管理</n-breadcrumb-item>
+                <n-breadcrumb-item>{{ currentRoute }}</n-breadcrumb-item>
+              </n-breadcrumb>
+            </div>
+            <div class="header-right">
+              <n-space>
+                <n-dropdown :options="userOptions" trigger="click" @select="handleSelect">
+                  <n-button text>
+                    <n-icon size="16">
+                      <setting-outlined />
+                    </n-icon>
+                  </n-button>
+                </n-dropdown>
+              </n-space>
+            </div>
+          </div>
+        </n-layout-header>
+        <n-layout-content class="admin-main">
+          <div class="content-container">
+            <router-view></router-view>
+          </div>
+        </n-layout-content>
+      </n-layout>
     </n-layout>
-  </n-layout>
+  </n-dialog-provider>
 </template>
 
 <script setup lang="ts">
