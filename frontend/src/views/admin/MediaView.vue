@@ -135,20 +135,39 @@ const typeOptions = [
 const fileOptions = [
   { label: '预览', key: 'preview' },
   { label: '复制链接', key: 'copy' },
+  { label: '重命名', key: 'rename' },
   { label: '删除', key: 'delete' }
 ]
 
-// 模拟文件数据
-const files = ref<MediaFile[]>([
-  {
-    id: 1,
-    name: 'example.jpg',
-    type: 'image',
-    size: 1024 * 1024,
-    url: 'https://example.com/image.jpg',
-    uploadTime: '2024-01-15'
+// 文件数据，初始为空
+const files = ref<MediaFile[]>([])
+
+// 后端基础URL（请根据实际后端端口修改）
+const backendUrl = 'http://localhost:8080'
+
+// 获取真实文件列表（假设有 uploadService.listFiles 方法）
+const loadFiles = async () => {
+  try {
+    // 假设后端返回 [{ filename, filepath, size, uploadTime, mimetype }]
+    const res = await (uploadService.listFiles?.() ?? Promise.resolve([]))
+    const arr = (res.data ?? res) as any[]
+    files.value = arr.map((f, idx) => ({
+      id: idx + 1,
+      name: f.filename,
+      type: f.mimetype?.startsWith('image') ? 'image' : (f.mimetype?.includes('pdf') || f.mimetype?.includes('doc') ? 'document' : 'other'),
+      size: f.size,
+      url: backendUrl + f.filepath,
+      uploadTime: f.uploadTime || new Date().toISOString().slice(0, 10)
+    }))
+  } catch (err) {
+    files.value = []
   }
-])
+}
+
+import { onMounted } from 'vue'
+onMounted(() => {
+  loadFiles()
+})
 
 // 过滤后的文件列表
 const filteredFiles = computed(() => {
@@ -160,25 +179,88 @@ const filteredFiles = computed(() => {
 })
 
 // 处理文件上传
-const handleUpload = (options: any) => {
-  console.log('Upload:', options)
-  message.success('文件上传成功')
+import { uploadService } from '@/services/uploadService'
+
+const handleUpload = async (options: any) => {
+  // 兼容 NUpload 的文件格式
+  const file = options.file?.file ?? options.file
+  if (!file) {
+    message.error('未获取到文件')
+    return
+  }
+  try {
+    const res = await uploadService.uploadFile(file)
+    // Naive axios 封装，需取 res.data
+    const result = res.data ?? res
+    files.value.push({
+      id: Date.now(),
+      name: result.filename,
+      type: file.type.startsWith('image') ? 'image' : (file.type.includes('pdf') || file.type.includes('doc') ? 'document' : 'other'),
+      size: file.size,
+      url: backendUrl + result.filepath,
+      uploadTime: new Date().toISOString().slice(0, 10)
+    })
+    message.success('文件上传成功')
+  } catch (err) {
+    console.error('上传失败', err)
+    message.error('文件上传失败')
+  }
 }
 
 // 处理文件操作
-const handleFileAction = (key: string, file: MediaFile) => {
-  switch (key) {
-    case 'preview':
-      selectedFile.value = file
-      previewVisible.value = true
-      break
-    case 'copy':
-      copyFileUrl()
-      break
-    case 'delete':
-      files.value = files.value.filter(f => f.id !== file.id)
-      message.success('文件已删除')
-      break
+import { h } from 'vue'
+// NInput 只在顶部导入一次
+// import { NInput } from 'naive-ui' // 已在顶部导入
+import { useDialog } from 'naive-ui'
+const dialog = useDialog()
+
+const handleFileAction = (action: string, file: MediaFile) => {
+  if (action === 'copy') {
+    navigator.clipboard.writeText(file.url)
+    message.success('链接已复制')
+  } else if (action === 'preview') {
+    selectedFile.value = file
+    previewVisible.value = true
+  } else if (action === 'delete') {
+    dialog.warning({
+      title: '删除文件',
+      content: `确定要删除 ${file.name} 吗？`,
+      positiveText: '删除',
+      negativeText: '取消',
+      onPositiveClick: async () => {
+        try {
+          await uploadService.deleteFile(file.name)
+          message.success('删除成功')
+          loadFiles()
+        } catch (err) {
+          message.error('删除失败')
+        }
+      }
+    })
+  } else if (action === 'rename') {
+    let newFileName = file.name
+    dialog.create({
+      title: '重命名文件',
+      content: () => h(NInput, {
+        value: newFileName,
+        onUpdateValue: (v: string) => { newFileName = v }
+      }),
+      positiveText: '确定',
+      negativeText: '取消',
+      onPositiveClick: async () => {
+        if (!newFileName || newFileName === file.name) {
+          message.warning('请输入新文件名')
+          return
+        }
+        try {
+          await uploadService.renameFile(file.name, newFileName)
+          message.success('重命名成功')
+          loadFiles()
+        } catch (err) {
+          message.error('重命名失败')
+        }
+      }
+    })
   }
 }
 

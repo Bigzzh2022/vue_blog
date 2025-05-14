@@ -1,5 +1,21 @@
 <template>
   <div class="article-view">
+    <!-- 加载状态 -->
+    <div v-if="loading" class="loading-state">
+      <n-spin size="large" />
+      <p>正在加载文章...</p>
+    </div>
+    
+    <!-- 错误状态 -->
+    <div v-else-if="error" class="error-state">
+      <n-result status="error" title="加载失败" :description="error">
+        <template #footer>
+          <n-button @click="loadArticle(articleId)">重试</n-button>
+        </template>
+      </n-result>
+    </div>
+    
+    <!-- 文章内容 -->
     <!-- 文章头部 -->
     <header class="article-header">
       <div class="article-meta">
@@ -95,6 +111,8 @@ import { WeiboOutlined, WechatOutlined, LinkOutlined } from '@vicons/antd'
 import CommentList from '@/components/CommentList.vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import { useArticleStore } from '@/stores/article'
+import { articleService, type Post } from '@/services/articleService'
+import { NSpin, NResult, NButton } from 'naive-ui'
 
 const route = useRoute()
 const message = useMessage()
@@ -102,99 +120,48 @@ const articleStore = useArticleStore()
 const articleId = route.params.id as string
 
 // 文章数据
-const article = ref({
-  id: articleId,
-  title: '在Vue3中使用TypeScript的最佳实践',
-  content: `# 在Vue3中使用TypeScript的最佳实践
+const article = ref<Post>({} as Post)
+const loading = ref(true)
+const error = ref<string | null>(null)
 
-## 引言
-TypeScript已经成为现代前端开发中不可或缺的工具。在Vue3项目中正确使用TypeScript不仅可以提高代码质量，还能获得更好的开发体验。
+// 上一篇/下一篇文章
+const prevArticle = ref<{ id: string, title: string } | null>(null)
+const nextArticle = ref<{ id: string, title: string } | null>(null)
 
-## 为什么要在Vue3中使用TypeScript？
-1. 好的类型检查
-2. 更好的IDE支持
-3. 更容易重构
-4. 更好的团队协作
-
-## 代码示例
-
-### 1. 组件Props的类型定义
-
-\`\`\`typescript
-interface Props {
-  message: string
-  count?: number
-  isVisible?: boolean
+// 加载文章数据
+const loadArticle = async (id: string) => {
+  loading.value = true
+  error.value = null
+  
+  try {
+    // 使用 articleService 获取文章数据
+    // http.ts 中的响应拦截器会自动返回 response.data
+    article.value = await articleService.getPost(id)
+    
+    // 设置文章标题
+    articleStore.setTitle(article.value.title)
+    
+    // 加载上一篇/下一篇文章
+    // 注意：这里假设后端有相应接口，实际实现可能需要调整
+    // 如果后端没有相应接口，可以先不实现这个功能
+    // const navResponse = await articleService.getArticleNavigation(id)
+    // prevArticle.value = navResponse.prev
+    // nextArticle.value = navResponse.next
+    
+    // 处理文章中的外部链接
+    nextTick(() => {
+      processExternalLinks()
+    })
+  } catch (err) {
+    console.error('加载文章失败:', err)
+    error.value = err instanceof Error ? err.message : '加载文章失败'
+  } finally {
+    loading.value = false
+  }
 }
-
-defineProps<Props>()
-\`\`\`
-
-### 2. 响应式数据的类型定义
-
-\`\`\`typescript
-interface User {
-  id: number
-  name: string
-  email: string
-}
-
-const userExample = ref<User>({
-  id: 1,
-  name: 'John Doe',
-  email: 'john@example.com'
-})
-\`\`\`
-
-### 3. 计算属性的类型推导
-
-\`\`\`typescript
-const fullNameExample = computed(() => {
-  return \`\${userExample.value.name} (\${userExample.value.email})\`
-})
-\`\`\`
-
-## 最佳实践
-
-1. 始终为props定义类型
-2. 使用类型断言要谨慎
-3. 善用工具类型
-4. 保持类型定义的一致性
-
-## 常见陷阱
-
-1. any的过度使用
-2. 类型断言的滥用
-3. 忽略null和undefined检查
-
-## 总结
-
-TypeScript能够显著提升Vue3项目的开发体验和代码质量，但需要遵循一些最佳实践才能充分发挥其优势。
-
-## 参考资料
-   <a href="https://example.com" v-safe-link>外部链接</a>
-1. [Vue3官方文档](https://vuejs.org/)
-2. [TypeScript官方文档](https://www.typescriptlang.org/)
-3. [Vue3 + TypeScript最佳实践指南](https://example.com)`,
-  publishDate: new Date('2024-01-15'),
-  views: 1234,
-  category: '前端开发',
-  tags: ['Vue3', 'TypeScript', '最佳实践', '前端开发'],
-  coverImage: 'https://picsum.photos/800/400'
-})
-
-const prevArticle = ref({
-  id: 'prev-article',
-  title: 'Vue3组件设计模式解析'
-})
-
-const nextArticle = ref({
-  id: 'next-article',
-  title: 'Vue3性能优化指南'
-})
 
 // 格式化日期
-const formatDate = (date: Date) => {
+const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'long',
@@ -205,13 +172,8 @@ const formatDate = (date: Date) => {
 // 监听路由变化
 watch(() => route.params.id, async (newId) => {
   if (newId) {
-    // 这里应该调用API获取新文章数据
-    // const response = await fetch(`/api/articles/${newId}`)
-    // article.value = await response.json()
-    
-    // 更新文章标题
-    console.log('Setting title on route change:', article.value.title)
-    articleStore.setTitle(article.value.title)
+    // 调用加载文章函数
+    await loadArticle(newId as string)
   }
 }, { immediate: true })
 
@@ -251,12 +213,10 @@ const processExternalLinks = () => {
 }
 
 onMounted(() => {
-  // 假设这里从API获取文章数据
-  const articleTitle = '在Vue3中使用TypeScript的最佳实践'
-  articleStore.setTitle(articleTitle)
-  
-  // 处理文章中的外部链接
-  processExternalLinks()
+  // 从 API 获取文章数据
+  if (articleId) {
+    loadArticle(articleId)
+  }
 })
 
 onUnmounted(() => {

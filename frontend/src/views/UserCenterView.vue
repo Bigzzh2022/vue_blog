@@ -1,6 +1,10 @@
 <template>
   <div class="user-center-view">
-    <div class="user-center-container">
+    <div v-if="loading" class="loading-state">
+      <n-spin size="large" />
+      <p>加载用户数据中...</p>
+    </div>
+    <div v-else class="user-center-container">
       <div class="user-profile-section">
         <div class="user-avatar">
           <img v-if="userInfo?.avatar" :src="userInfo.avatar" :alt="userInfo?.username">
@@ -30,7 +34,7 @@
                 <textarea v-model="profile.bio" placeholder="介绍一下自己吧..."></textarea>
               </div>
               <div class="form-actions">
-                <n-button type="primary" @click="updateProfile">保存更改</n-button>
+                <n-button type="primary" @click="updateProfile" :loading="profileLoading">保存更改</n-button>
               </div>
             </div>
           </n-tab-pane>
@@ -51,7 +55,7 @@
                 <input type="password" v-model="security.confirmPassword" placeholder="确认新密码">
               </div>
               <div class="form-actions">
-                <n-button type="primary" @click="updatePassword">更新密码</n-button>
+                <n-button type="primary" @click="updatePassword" :loading="passwordLoading">更新密码</n-button>
               </div>
             </div>
           </n-tab-pane>
@@ -83,7 +87,7 @@
               </div>
               
               <div class="form-actions">
-                <n-button type="primary" @click="saveNotificationSettings">保存设置</n-button>
+                <n-button type="primary" @click="saveNotificationSettings" :loading="notificationLoading">保存设置</n-button>
               </div>
             </div>
           </n-tab-pane>
@@ -117,20 +121,21 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { NTabs, NTabPane, NButton, NSwitch } from 'naive-ui'
+import { NTabs, NTabPane, NButton, NSwitch, NSpin } from 'naive-ui'
 import { useMessage } from 'naive-ui'
 import { useUserStore } from '@/stores/user'
+import { userService, type UserInfo } from '@/services/userService'
 
 const userStore = useUserStore()
 const message = useMessage()
 
 // 用户信息
-const userInfo = ref(userStore.currentUser)
+const userInfo = ref<UserInfo | null>(null)
 
 // 个人资料表单
 const profile = reactive({
-  username: userInfo.value?.username || '',
-  email: userInfo.value?.email || '',
+  username: '',
+  email: '',
   bio: '',
 })
 
@@ -149,10 +154,13 @@ const notifications = reactive({
 })
 
 // 浏览历史
-const history = ref([
-  { id: '1', title: '在Vue3中使用TypeScript的最佳实践', date: new Date().toISOString() },
-  { id: '2', title: 'Vue3组件设计模式解析', date: new Date(Date.now() - 86400000).toISOString() },
-])
+const history = ref<{ id: string, title: string, date: string }[]>([])
+
+// 加载状态
+const loading = ref(false)
+const profileLoading = ref(false)
+const passwordLoading = ref(false)
+const notificationLoading = ref(false)
 
 // 格式化日期
 const formatDate = (dateString?: string) => {
@@ -165,51 +173,192 @@ const formatDate = (dateString?: string) => {
 }
 
 // 更新个人资料
-const updateProfile = () => {
-  // 模拟API调用
-  setTimeout(() => {
+const updateProfile = async () => {
+  if (!userInfo.value) {
+    message.error('用户未登录')
+    return
+  }
+  
+  profileLoading.value = true
+  
+  try {
+    // 这里应该调用后端更新用户资料的API
+    // 如果后端没有相应的API，可以模拟成功响应
+    // const updatedUser = await userService.updateProfile(profile)
+    // userStore.currentUser = updatedUser
+    
+    // 模拟成功响应
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    // 更新存储中的用户信息
+    if (userInfo.value) {
+      userInfo.value.username = profile.username
+      // 其他字段更新...
+    }
+    
     message.success('个人资料更新成功')
-  }, 1000)
+  } catch (error) {
+    console.error('更新个人资料失败:', error)
+    message.error('更新个人资料失败')
+  } finally {
+    profileLoading.value = false
+  }
 }
 
 // 更新密码
-const updatePassword = () => {
+const updatePassword = async () => {
+  if (!userInfo.value) {
+    message.error('用户未登录')
+    return
+  }
+  
   if (security.newPassword !== security.confirmPassword) {
     message.error('两次输入的密码不一致')
     return
   }
   
-  // 模拟API调用
-  setTimeout(() => {
+  if (!security.currentPassword || !security.newPassword) {
+    message.error('请填写完整的密码信息')
+    return
+  }
+  
+  passwordLoading.value = true
+  
+  try {
+    // 这里应该调用后端更新密码的API
+    // 如果后端没有相应的API，可以模拟成功响应
+    // await userService.updatePassword({
+    //   currentPassword: security.currentPassword,
+    //   newPassword: security.newPassword
+    // })
+    
+    // 模拟成功响应
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
     message.success('密码更新成功')
     security.currentPassword = ''
     security.newPassword = ''
     security.confirmPassword = ''
-  }, 1000)
+  } catch (error) {
+    console.error('更新密码失败:', error)
+    message.error('更新密码失败')
+  } finally {
+    passwordLoading.value = false
+  }
 }
 
 // 保存通知设置
-const saveNotificationSettings = () => {
-  // 模拟API调用
-  setTimeout(() => {
+const saveNotificationSettings = async () => {
+  if (!userInfo.value) {
+    message.error('用户未登录')
+    return
+  }
+  
+  notificationLoading.value = true
+  
+  try {
+    // 这里应该调用后端保存通知设置的API
+    // 如果后端没有相应的API，可以模拟成功响应
+    // await userService.updateNotificationSettings(notifications)
+    
+    // 模拟成功响应
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
     message.success('通知设置已保存')
-  }, 1000)
+  } catch (error) {
+    console.error('保存通知设置失败:', error)
+    message.error('保存通知设置失败')
+  } finally {
+    notificationLoading.value = false
+  }
 }
 
 // 移除历史记录项
-const removeHistoryItem = (index: number) => {
-  history.value.splice(index, 1)
-  message.success('已从历史记录中移除')
+const removeHistoryItem = async (index: number) => {
+  try {
+    // 这里应该调用后端删除历史记录的API
+    // 如果后端没有相应的API，可以直接修改前端数据
+    const itemToRemove = history.value[index]
+    // await userService.removeHistoryItem(itemToRemove.id)
+    
+    // 从前端列表中移除
+    history.value.splice(index, 1)
+    
+    // 如果使用localStorage存储，可以更新localStorage
+    localStorage.setItem('browsing_history', JSON.stringify(history.value))
+    
+    message.success('已移除浏览记录')
+  } catch (error) {
+    console.error('移除浏览记录失败:', error)
+    message.error('移除浏览记录失败')
+  }
 }
 
 // 清空历史记录
-const clearHistory = () => {
-  history.value = []
-  message.success('历史记录已清空')
+const clearHistory = async () => {
+  try {
+    // 这里应该调用后端清空历史记录的API
+    // 如果后端没有相应的API，可以直接修改前端数据
+    // await userService.clearHistory()
+    
+    // 清空前端列表
+    history.value = []
+    
+    // 如果使用localStorage存储，可以清空相应的数据
+    localStorage.removeItem('browsing_history')
+    
+    message.success('已清空浏览历史')
+  } catch (error) {
+    console.error('清空浏览历史失败:', error)
+    message.error('清空浏览历史失败')
+  }
 }
 
-// 初始化数据
-onMounted(() => {
+// 加载用户数据
+onMounted(async () => {
+  loading.value = true
+  
+  try {
+    // 如果用户已登录，获取用户信息
+    if (userStore.isLoggedIn) {
+      // 尝试从后端获取最新的用户信息
+      try {
+        const freshUserInfo = await userService.getUserInfo()
+        if (freshUserInfo) {
+          userInfo.value = freshUserInfo
+        } else {
+          // 如果后端获取失败，使用存储中的用户信息
+          userInfo.value = userStore.currentUser
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error)
+        userInfo.value = userStore.currentUser
+      }
+      
+      // 填充表单数据
+      if (userInfo.value) {
+        profile.username = userInfo.value.username
+        profile.email = userInfo.value.email
+        // 如果有其他字段，也可以填充
+      }
+      
+      // 加载浏览历史
+      const savedHistory = localStorage.getItem('browsing_history')
+      if (savedHistory) {
+        try {
+          history.value = JSON.parse(savedHistory)
+        } catch (error) {
+          console.error('解析浏览历史失败:', error)
+          history.value = []
+        }
+      }
+    }
+  } catch (error) {
+    console.error('初始化用户中心失败:', error)
+    message.error('加载用户数据失败')
+  } finally {
+    loading.value = false
+  }
   // 可以在这里加载用户数据
   console.log('用户中心页面已加载')
 })

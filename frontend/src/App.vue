@@ -1,23 +1,19 @@
 <template>
   <n-message-provider>
-    <n-config-provider :theme="theme">
-      <NavBar v-if="!isAdminRoute && route?.path !== '/404'" />
-      <router-view></router-view>
-      
-      <!-- 外部链接安全提示 -->
-      <ExternalLinkAlert 
-        v-model:visible="showExternalLinkAlert" 
-        :url="externalLinkUrl"
-        @proceed="handleExternalLinkProceed"
-      />
-    </n-config-provider>
+    <n-dialog-provider>
+      <n-config-provider :theme="theme">
+        <NavBar v-if="!isAdminRoute && route?.path !== '/404'" />
+        <router-view></router-view>
+        <!-- 外部链接安全提示 -->
+      </n-config-provider>
+    </n-dialog-provider>
   </n-message-provider>
 </template>
 
 <script lang="ts" setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { NMessageProvider, NConfigProvider, darkTheme } from 'naive-ui'
+import { NMessageProvider, NConfigProvider, NDialogProvider, darkTheme } from 'naive-ui'
 import NavBar from './components/NavBar.vue'
 import ExternalLinkAlert from './components/ExternalLinkAlert.vue'
 import { registerSafeLink, setGlobalSafeLinkOptions } from './directives/safeLink'

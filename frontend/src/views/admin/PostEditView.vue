@@ -101,6 +101,7 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { ref, shallowRef, onBeforeUnmount, nextTick, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { 
@@ -127,6 +128,11 @@ import 'md-editor-v3/lib/style.css'
 const router = useRouter()
 const route = useRoute()
 const richEditorRef = shallowRef<IDomEditor | null>(null)
+
+onMounted(() => {
+  fetchCategories()
+  fetchTags()
+})
 const mdEditorRef = ref<InstanceType<typeof MdEditor> | null>(null)
 const editorType = ref('rich')
 const formRef = ref<FormInst | null>(null)
@@ -192,12 +198,21 @@ const rules = {
   }
 }
 
-// 分类选项
-const categoryOptions = [
-  { label: '技术', value: 'tech' },
-  { label: '生活', value: 'life' },
-  { label: '随笔', value: 'essay' }
-]
+// 分类和标签选项，统一用 adminService
+import { adminService } from '@/services/adminService'
+const categoryOptions = ref<{ label: string; value: string }[]>([])
+
+const fetchCategories = async () => {
+  try {
+    const res = await adminService.getCategories()
+    categoryOptions.value = res.map((item: any) => ({
+      label: item.name,
+      value: item.slug || item.name
+    }))
+  } catch (e) {
+    message.error('获取分类失败')
+  }
+}
 
 // 修改标签选项的类型
 interface TagOption {
@@ -206,13 +221,20 @@ interface TagOption {
   type?: 'success' | 'info' | 'warning' | 'error'
 }
 
-// 标签选项
-const tagOptions = ref<TagOption[]>([
-  { label: 'Vue', value: 'vue', type: 'success' },
-  { label: 'React', value: 'react', type: 'info' },
-  { label: 'TypeScript', value: 'typescript', type: 'warning' },
-  { label: '生活', value: 'life', type: 'error' }
-])
+const tagOptions = ref<TagOption[]>([])
+
+const fetchTags = async () => {
+  try {
+    const res = await adminService.getTags()
+    tagOptions.value = res.map((item: any) => ({
+      label: item.name,
+      value: item.name,
+      type: 'info'
+    }))
+  } catch (e) {
+    message.error('获取标签失败')
+  }
+}
 
 // wangEditor 配置
 const toolbarConfig = {
@@ -287,16 +309,20 @@ const handleCreated = (editor: IDomEditor) => {
 
 // 提交表单
 const handleSubmit = () => {
-  formRef.value?.validate((errors: Array<FormValidationError> | undefined) => {
+  formRef.value?.validate(async (errors: Array<FormValidationError> | undefined) => {
     if (!errors) {
       const statusMessages = {
         published: '文章已发布',
         draft: '草稿已保存',
         private: '文章已私密发布'
       }
-      console.log('表单数据：', formValue.value)
-      message.success(statusMessages[formValue.value.status])
-      router.push('/admin/posts')
+      try {
+        await adminService.createPost(formValue.value)
+        message.success(statusMessages[formValue.value.status])
+        router.push('/admin/posts')
+      } catch (err) {
+        message.error('文章保存失败，请重试')
+      }
     }
   })
 }

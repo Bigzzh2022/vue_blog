@@ -15,7 +15,13 @@
     <div class="stats-row">
       <NStat label="友链总数" tabular-nums>
         <template #value>
-          <span class="stat-value">{{ linkStore.approvedLinks.length }}</span>
+          <span v-if="linkStore.loading" class="loading-text">
+            <NIcon size="18" class="loading-icon">
+              <LoadingOutlined />
+            </NIcon>
+            加载中...
+          </span>
+          <span v-else class="stat-value">{{ linkStore.approvedLinks.length }}</span>
         </template>
       </NStat>
     </div>
@@ -48,31 +54,51 @@
     </div>
 
     <!-- 友链列表 -->
-    <div class="friends-grid">
-      <NCard 
-        v-for="friend in friends" 
-        :key="friend.id"
-        class="friend-card"
-        hoverable
-      >
-        <div class="friend-content">
-          <div class="friend-avatar">
-            <img 
-              :src="friend.icon" 
-              :alt="friend.name"
-              @error="handleImageError"
-            >
-          </div>
-          <div class="friend-info">
-            <h3 class="friend-name">
-              <a :href="friend.url" target="_blank" rel="noopener noreferrer">
-                {{ friend.name }}
-              </a>
-            </h3>
-            <p class="friend-desc">{{ friend.description }}</p>
-          </div>
+    <div class="friends-section">
+      <NSpin :show="linkStore.loading">
+        <div v-if="linkStore.error" class="error-message">
+          <NAlert type="error">
+            <template #icon>
+              <NIcon><WarningOutlined /></NIcon>
+            </template>
+            {{ linkStore.error }}
+            <template #action>
+              <NButton text @click="loadFriendLinks">重试</NButton>
+            </template>
+          </NAlert>
         </div>
-      </NCard>
+        
+        <div v-else-if="friends.length === 0 && !linkStore.loading" class="empty-state">
+          <NEmpty description="暂无友链数据" />
+        </div>
+        
+        <div v-else class="friends-grid">
+          <NCard 
+            v-for="friend in friends" 
+            :key="friend.id"
+            class="friend-card"
+            hoverable
+          >
+            <div class="friend-content">
+              <div class="friend-avatar">
+                <img 
+                  :src="friend.icon" 
+                  :alt="friend.name"
+                  @error="handleImageError"
+                >
+              </div>
+              <div class="friend-info">
+                <h3 class="friend-name">
+                  <a :href="friend.url" target="_blank" rel="noopener noreferrer">
+                    {{ friend.name }}
+                  </a>
+                </h3>
+                <p class="friend-desc">{{ friend.description }}</p>
+              </div>
+            </div>
+          </NCard>
+        </div>
+      </NSpin>
     </div>
 
     <!-- 申请表单 -->
@@ -128,11 +154,13 @@ import {
   NInput,
   NButton,
   NSelect,
+  NSpin,
+  NEmpty,
   useMessage
 } from 'naive-ui'
 import NStat from '@/components/NStat.vue'
 import type { FormInst } from 'naive-ui'
-import { TeamOutlined, LinkOutlined } from '@vicons/antd'
+import { TeamOutlined, LinkOutlined, LoadingOutlined, WarningOutlined } from '@vicons/antd'
 import { InformationOutline } from '@vicons/ionicons5'
 import { useLinkStore, type FriendLink } from '@/stores/links'
 
@@ -142,10 +170,16 @@ const submitting = ref(false)
 const linkStore = useLinkStore()
 
 // 加载友链数据
-onMounted(async () => {
-  if (!linkStore.loaded) {
+const loadFriendLinks = async () => {
+  try {
     await linkStore.loadLinks()
+  } catch (error) {
+    message.error('加载友链失败，请稍后重试')
   }
+}
+
+onMounted(() => {
+  loadFriendLinks()
 })
 
 // 表单数据
@@ -230,10 +264,13 @@ const handleSubmit = () => {
             description: '',
             status: 'pending'
           }
+          // 重新加载友链数据以确保显示最新状态
+          await loadFriendLinks()
         } else {
           message.error('提交失败，请稍后重试')
         }
       } catch (error) {
+        console.error('提交友链申请失败:', error)
         message.error('提交失败，请稍后重试')
       } finally {
         submitting.value = false
@@ -295,6 +332,35 @@ const handleSubmit = () => {
 .apply-content {
   font-size: 14px;
   line-height: 1.6;
+}
+
+.loading-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+}
+
+.loading-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.error-message {
+  margin-bottom: 20px;
+}
+
+.empty-state {
+  padding: 40px 0;
+  text-align: center;
+}
+
+.friends-section {
+  margin-bottom: 40px;
 }
 
 .apply-content ul {

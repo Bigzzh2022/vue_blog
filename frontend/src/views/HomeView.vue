@@ -69,18 +69,43 @@
       <!-- 文章列表区域 -->
       <div class="articles-section">
         <h2>最新文章</h2>
-        <div class="article-list">
-          <div class="article-card" v-for="i in 3" :key="i">
-            <div class="article-cover"></div>
+        <div v-if="loadingArticles" class="loading-articles">
+          <n-spin size="medium" />
+          <p>加载文章中...</p>
+        </div>
+        <div v-else-if="articlesError" class="articles-error">
+          <NAlert type="error">
+            {{ articlesError }}
+            <template #action>
+              <NButton text @click="fetchLatestArticles">
+                重试
+              </NButton>
+            </template>
+          </NAlert>
+        </div>
+        <div v-else-if="latestArticles.length === 0" class="no-articles">
+          <p>暂无文章</p>
+        </div>
+        <div v-else class="article-list">
+          <router-link 
+            v-for="article in latestArticles" 
+            :key="article.id" 
+            :to="`/article/${article.id}`"
+            class="article-card"
+          >
+            <div class="article-cover" v-if="article.coverImage">
+              <img :src="article.coverImage" :alt="article.title">
+            </div>
+            <div class="article-cover" v-else></div>
             <div class="article-content">
-              <h3>文章标题</h3>
-              <p class="article-desc">这是文章的简要描述，介绍文章的主要内容...</p>
+              <h3>{{ article.title }}</h3>
+              <p class="article-desc">{{ article.description }}</p>
               <div class="article-meta">
-                <span>2024-01-01</span>
-                <span>阅读: 100</span>
+                <span>{{ formatDate(article.publishDate) }}</span>
+                <span>阅读: {{ article.views }}</span>
               </div>
             </div>
-          </div>
+          </router-link>
         </div>
       </div>
     </section>
@@ -105,8 +130,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { NCarousel } from 'naive-ui'
+import { NCarousel, NSpin, NButton, NAlert } from 'naive-ui'
+import { articleService, type Post } from '@/services/articleService'
 import { useSettingsStore } from '@/stores/settings'
+import { adminService } from '@/services/adminService'
 import defaultAvatar from '@/assets/avatar.jpg'
 // 导入所有图标
 import wechatIcon from '@/assets/icons/wechat.svg'
@@ -146,6 +173,11 @@ const iconMap: Record<string, string> = {
 const contentRef = ref<HTMLElement | null>(null)
 const settingsStore = useSettingsStore()
 
+// 文章数据
+const latestArticles = ref<Post[]>([])
+const loadingArticles = ref(false)
+const articlesError = ref<string | null>(null)
+
 // 网站基本信息
 const siteTitle = ref('渐开线的小窝')
 const siteDescription = ref('给时光以生命，给岁月以文明')
@@ -169,25 +201,45 @@ const showDots = ref(true)
 // 获取设置
 const getSettings = async () => {
   try {
-    // 加载基本设置
-    const settings = settingsStore.getBasicSettings()
+    // 尝试从后端获取设置
+    const settings = await adminService.getSettings()
     
-    siteTitle.value = settings.siteTitle
-    siteDescription.value = settings.siteDescription
-    carouselEnabled.value = settings.carouselEnabled || false
-    carouselApiUrl.value = settings.carouselApiUrl || ''
-    carouselInterval.value = settings.carouselInterval || 5
-    carouselImageCount.value = settings.carouselImageCount || 5
-    icp.value = settings.icp || ''
-    startYear.value = settings.startYear || 2023
-    footerText.value = settings.footerText || '感谢您的访问'
-    footerLinks.value = settings.footerLinks || []
-    
-    // 加载个人资料
-    const profile = settingsStore.getProfileSettings()
-    avatar.value = profile.avatar || ''
-    bio.value = profile.bio || ''
-    socialLinks.value = profile.socialLinks || []
+    // 如果成功从后端获取设置，使用后端数据
+    if (settings) {
+      siteTitle.value = settings.siteName || '渐开线的小窝'
+      siteDescription.value = settings.siteDescription || '给时光以生命，给岁月以文明'
+      // 后端返回的设置中可能没有icp属性，使用原有值
+      footerText.value = settings.siteFooter || '感谢您的访问'
+      
+      // 处理社交链接
+      if (settings.socialLinks) {
+        socialLinks.value = Object.entries(settings.socialLinks).map(([key, value]) => ({
+          name: key,
+          url: value as string,
+          icon: key
+        }))
+      }
+    } else {
+      // 如果无法从后端获取，使用本地存储的设置
+      const localSettings = settingsStore.getBasicSettings()
+      
+      siteTitle.value = localSettings.siteTitle
+      siteDescription.value = localSettings.siteDescription
+      carouselEnabled.value = localSettings.carouselEnabled || false
+      carouselApiUrl.value = localSettings.carouselApiUrl || ''
+      carouselInterval.value = localSettings.carouselInterval || 5
+      carouselImageCount.value = localSettings.carouselImageCount || 5
+      icp.value = localSettings.icp || ''
+      startYear.value = localSettings.startYear || 2023
+      footerText.value = localSettings.footerText || '感谢您的访问'
+      footerLinks.value = localSettings.footerLinks || []
+      
+      // 加载个人资料
+      const profile = settingsStore.getProfileSettings()
+      avatar.value = profile.avatar || ''
+      bio.value = profile.bio || ''
+      socialLinks.value = profile.socialLinks || []
+    }
     
     if (carouselEnabled.value && carouselApiUrl.value) {
       await fetchCarouselImages()
@@ -256,10 +308,60 @@ const getSocialIcon = (icon: string): string => {
   return iconMap[icon] || iconMap.link
 }
 
+// 获取最新文章
+const fetchLatestArticles = async () => {
+  loadingArticles.value = true
+  articlesError.value = null
+  
+  try {
+    // 获取已发布的文章，限制为5篇
+    const params = { status: 'published', limit: 5 }
+    const articles = await adminService.getPosts(params)
+    
+    if (Array.isArray(articles)) {
+      // 将文章数据转换为符合Post类型的格式
+      latestArticles.value = articles.map(article => ({
+        id: article.id,
+        title: article.title,
+        content: article.content || '',
+        description: article.description || article.content?.substring(0, 100) + '...',
+        category: article.category || '',
+        tags: article.tags || [],
+        status: article.status || 'published',
+        author: article.author || '',
+        views: article.views || 0,
+        publishDate: article.publishDate || article.createTime || new Date().toISOString(),
+        updateTime: article.updateTime || article.publishDate || new Date().toISOString(),
+        coverImage: article.coverImage || '',
+        commentCount: article.commentCount || 0
+      })) as Post[]
+    } else {
+      latestArticles.value = []
+    }
+  } catch (error) {
+    console.error('获取最新文章失败:', error)
+    articlesError.value = '获取文章失败，请稍后重试'
+  } finally {
+    loadingArticles.value = false
+  }
+}
+
+// 格式化日期
+const formatDate = (date: string) => {
+  return new Date(date).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+}
+
 onMounted(() => {
   // 加载设置，初始化轮播图
   settingsStore.loadSettingsFromStorage()
   getSettings()
+  
+  // 获取最新文章
+  fetchLatestArticles()
 })
 </script>
 

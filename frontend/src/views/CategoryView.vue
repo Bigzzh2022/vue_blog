@@ -10,12 +10,23 @@
           分类
         </h2>
         
-        <div class="category-grid">
+        <div v-if="loading" class="loading-state">
+          <NSpin size="medium" />
+          <p>加载分类中...</p>
+        </div>
+        <div v-else-if="error" class="error-state">
+          <p>{{ error }}</p>
+          <NButton @click="fetchCategories">重试</NButton>
+        </div>
+        <div v-else-if="categories.length === 0" class="empty-state">
+          <NEmpty description="暂无分类" />
+        </div>
+        <div v-else class="category-grid">
           <NCard 
             v-for="category in categories" 
-            :key="category.id"
+            :key="category.name"
             class="category-card"
-            :class="{ active: currentCategory?.id === category.id }"
+            :class="{ active: currentCategory?.name === category.name }"
             hoverable
             @click="goToCategory(category)"
           >
@@ -62,43 +73,57 @@
         </div>
 
         <div class="article-list">
-          <NCard 
-            v-for="article in articles" 
-            :key="article.id"
-            class="article-card"
-            hoverable
-          >
-            <div class="article-content">
-              <h3 class="article-title">{{ article.title }}</h3>
-              <p class="article-desc">{{ article.description }}</p>
-              <div class="article-meta">
-                <div class="meta-left">
-                  <NSpace align="center" size="small">
-                    <NIcon><CalendarOutlined /></NIcon>
-                    <span>{{ article.createTime }}</span>
-                  </NSpace>
-                  <NSpace align="center" size="small">
-                    <NIcon><EyeOutlined /></NIcon>
-                    <span>{{ article.views }} 阅读</span>
-                  </NSpace>
-                </div>
-                <div class="meta-right">
-                  <NSpace>
-                    <NTag 
-                      v-for="tag in article.tags" 
-                      :key="tag"
-                      size="small"
-                      round
-                      :bordered="false"
-                      type="success"
-                    >
-                      {{ tag }}
-                    </NTag>
-                  </NSpace>
+          <div v-if="articlesLoading" class="loading-state">
+            <NSpin size="medium" />
+            <p>加载文章中...</p>
+          </div>
+          <div v-else-if="articlesError" class="error-state">
+            <p>{{ articlesError }}</p>
+            <NButton @click="fetchArticlesByCategory">重试</NButton>
+          </div>
+          <div v-else-if="articles.length === 0" class="empty-state">
+            <NEmpty description="暂无文章" />
+          </div>
+          <template v-else>
+            <NCard 
+              v-for="article in articles" 
+              :key="article.id"
+              class="article-card"
+              hoverable
+              @click="router.push(`/article/${article.id}`)"
+            >
+              <div class="article-content">
+                <h3 class="article-title">{{ article.title }}</h3>
+                <p class="article-desc">{{ article.description }}</p>
+                <div class="article-meta">
+                  <div class="meta-left">
+                    <NSpace align="center" size="small">
+                      <NIcon><CalendarOutlined /></NIcon>
+                      <span>{{ formatDate(article.publishDate) }}</span>
+                    </NSpace>
+                    <NSpace align="center" size="small">
+                      <NIcon><EyeOutlined /></NIcon>
+                      <span>{{ article.views }} 阅读</span>
+                    </NSpace>
+                  </div>
+                  <div class="meta-right">
+                    <NSpace>
+                      <NTag 
+                        v-for="tag in article.tags" 
+                        :key="tag"
+                        size="small"
+                        round
+                        :bordered="false"
+                        type="success"
+                      >
+                        {{ tag }}
+                      </NTag>
+                    </NSpace>
+                  </div>
                 </div>
               </div>
-            </div>
-          </NCard>
+            </NCard>
+          </template>
         </div>
 
         <div class="pagination">
@@ -118,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { 
   NCard, 
@@ -127,7 +152,9 @@ import {
   NTag, 
   NPagination,
   NSelect,
-  NButton
+  NButton,
+  NSpin,
+  NEmpty
 } from 'naive-ui'
 import { 
   FolderOutlined,
@@ -136,87 +163,35 @@ import {
   EyeOutlined,
   ArrowLeftOutlined
 } from '@vicons/antd'
+import { categoryService, type Category } from '@/services/categoryService'
+import { articleService, type Post } from '@/services/articleService'
 
-// 定义分类接口
-interface Category {
-  id: number
-  name: string
+// 扩展分类接口，添加额外属性
+interface CategoryWithMeta extends Category {
   slug: string
   count: number
 }
 
-// 定义文章接口
-interface Article {
-  id: number
-  title: string
-  description: string
-  createTime: string
-  views: number
-  tags: string[]
-}
+// 使用后端的Post接口代替本地的Article接口
 
 const router = useRouter()
 const route = useRoute()
 const slug = computed(() => route.params.slug as string)
 
-// 模拟分类数据
-const categories = ref<Category[]>([
-  {
-    id: 1,
-    name: '技术',
-    slug: 'tech',
-    count: 25
-  },
-  {
-    id: 2,
-    name: '生活',
-    slug: 'life',
-    count: 18
-  },
-  {
-    id: 3,
-    name: '随笔',
-    slug: 'essay',
-    count: 15
-  },
-  {
-    id: 4,
-    name: '阅读',
-    slug: 'reading',
-    count: 12
-  }
-])
-
-// 模拟文章数据
-const articles = ref<Article[]>([
-  {
-    id: 1,
-    title: 'Vue3 组合式 API 最佳实践',
-    description: '本文介绍了 Vue3 组合式 API 的使用技巧和最佳实践，帮助你更好地组织代码...',
-    createTime: '2024-01-15',
-    views: 156,
-    tags: ['Vue', 'TypeScript']
-  },
-  {
-    id: 2,
-    title: 'TypeScript 高级技巧分享',
-    description: '深入探讨 TypeScript 的高级特性，包括类型体操、泛型和装饰器等内容...',
-    createTime: '2024-01-14',
-    views: 89,
-    tags: ['TypeScript', 'JavaScript']
-  },
-  {
-    id: 3,
-    title: '2024 年度计划',
-    description: '回顾过去一年的收获，展望新的一年的目标和计划...',
-    createTime: '2024-01-13',
-    views: 245,
-    tags: ['随笔']
-  }
-])
+// 状态变量
+const loading = ref(false)
+const error = ref<string | null>(null)
+const categories = ref<CategoryWithMeta[]>([])
+const articles = ref<Post[]>([])
+const articlesLoading = ref(false)
+const articlesError = ref<string | null>(null)
+const totalArticles = ref(0)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
+
+// 添加排序选项
+const sortBy = ref('newest')
 
 // 跳转到具体分类页
 const goToCategory = (category: Category) => {
@@ -226,16 +201,123 @@ const goToCategory = (category: Category) => {
 // 根据 slug 获取当前分类
 const currentCategory = computed(() => {
   if (!slug.value) return null
-  return categories.value.find((c: Category) => c.slug === slug.value) || null
+  return categories.value.find((c) => c.slug === slug.value) || null
 })
 
-// 监听路由变化，重置页码
-onMounted(() => {
+// 获取所有分类
+const fetchCategories = async () => {
+  loading.value = true
+  error.value = null
+  
+  try {
+    const response = await categoryService.getCategories()
+    
+    // 将后端返回的分类数据转换为前端需要的格式
+    categories.value = (Array.isArray(response) ? response : []).map((category: Category) => ({
+      ...category,
+      slug: category.name.toLowerCase().replace(/\s+/g, '-'), // 生成slug
+      count: 0 // 初始化文章数量为0
+    }))
+    
+    // 获取每个分类的文章数量
+    await Promise.all(categories.value.map(async (category) => {
+      try {
+        const articles = await articleService.getPosts({ category: category.name, status: 'published' })
+        category.count = Array.isArray(articles) ? articles.length : 0
+      } catch (err) {
+        console.error(`获取分类 ${category.name} 的文章数量失败:`, err)
+      }
+    }))
+  } catch (err) {
+    console.error('获取分类列表失败:', err)
+    error.value = '获取分类列表失败，请稍后重试'
+  } finally {
+    loading.value = false
+  }
+}
+
+// 获取分类下的文章
+const fetchArticlesByCategory = async () => {
+  if (!currentCategory.value) return
+  
+  articlesLoading.value = true
+  articlesError.value = null
+  
+  try {
+    // 调用API获取指定分类的文章
+    const response = await articleService.getPosts({ 
+      category: currentCategory.value.name,
+      status: 'published',
+      // 可以添加分页参数，如果后端支持的话
+      // page: currentPage.value,
+      // pageSize: pageSize.value
+    })
+    
+    articles.value = Array.isArray(response) ? response : []
+    totalArticles.value = articles.value.length
+    
+    // 根据排序选项排序文章
+    sortArticles()
+  } catch (err) {
+    console.error('获取分类文章失败:', err)
+    articlesError.value = '获取文章列表失败，请稍后重试'
+  } finally {
+    articlesLoading.value = false
+  }
+}
+
+// 排序文章
+const sortArticles = () => {
+  const sortedArticles = [...articles.value]
+  
+  switch (sortBy.value) {
+    case 'newest':
+      sortedArticles.sort((a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime())
+      break
+    case 'oldest':
+      sortedArticles.sort((a, b) => new Date(a.publishDate).getTime() - new Date(b.publishDate).getTime())
+      break
+    case 'most-read':
+      sortedArticles.sort((a, b) => b.views - a.views)
+      break
+  }
+  
+  articles.value = sortedArticles
+}
+
+// 监听排序变化
+watch(sortBy, () => {
+  sortArticles()
+})
+
+// 监听路由变化
+watch(() => route.params.slug, () => {
   currentPage.value = 1
+  if (slug.value) {
+    fetchArticlesByCategory()
+  }
+}, { immediate: true })
+
+// 格式化日期
+const formatDate = (date: string) => {
+  return new Date(date).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+}
+
+onMounted(() => {
+  // 获取所有分类
+  fetchCategories()
+  
+  // 如果有slug参数，获取该分类下的文章
+  if (slug.value) {
+    fetchArticlesByCategory()
+  }
 })
 
-// 添加排序选项
-const sortBy = ref('newest')
+// 排序选项已在上方定义
 const sortOptions = [
   { label: '最新发布', value: 'newest' },
   { label: '最多阅读', value: 'most-read' },

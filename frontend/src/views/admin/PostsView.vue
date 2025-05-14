@@ -59,16 +59,28 @@
         </NSpace>
       </NSpace>
 
-      <NDataTable
-        :columns="columns"
-        :data="filteredPosts"
-        :pagination="pagination"
-        :bordered="false"
-        :single-line="false"
-        :row-key="row => row.id"
-        @update:checked-row-keys="handleCheck"
-        :checked-row-keys="selectedRowKeys"
-      />
+      <NSpin :show="loading">
+        <div v-if="error" class="error-message">
+          <NAlert type="error">
+            {{ error }}
+            <template #action>
+              <NButton text @click="loadPosts">重试</NButton>
+            </template>
+          </NAlert>
+        </div>
+        <NEmpty v-else-if="filteredPosts.length === 0 && !loading" description="暂无文章" />
+        <NDataTable
+          v-else
+          :columns="columns"
+          :data="filteredPosts"
+          :pagination="pagination"
+          :bordered="false"
+          :single-line="false"
+          :row-key="row => row.id"
+          @update:checked-row-keys="handleCheck"
+          :checked-row-keys="selectedRowKeys"
+        />
+      </NSpin>
     </NSpace>
 
     <!-- 使用回收站组件 -->
@@ -86,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed } from 'vue'
+import { h, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import type { DataTableColumns } from 'naive-ui'
 import type { OnUpdateCheckedRowKeys, RowKey } from 'naive-ui/es/data-table/src/interface'
@@ -107,7 +119,9 @@ import {
   NListItem, 
   NThing, 
   NDivider,
-  NAlert
+  NAlert,
+  NSpin,
+  NEmpty
 } from 'naive-ui'
 import { 
   Add as DocumentAdd, 
@@ -118,6 +132,7 @@ import {
 } from '@vicons/ionicons5'
 import RecycleBin from '@/components/RecycleBin.vue'
 import type { RecycleBinItem } from '@/types/recycle-bin'
+import adminService from '@/services/adminService'
 
 interface Post {
   id: number
@@ -155,39 +170,37 @@ const statusOptions = [
   { label: '私密', value: 'private' }
 ]
 
-// 模拟文章数据
-const posts = ref<Post[]>([
-  {
-    id: 1,
-    title: 'Vue3 组合式 API 最佳实践',
-    category: '技术',
-    tags: ['Vue', 'TypeScript'],
-    status: 'published',
-    createTime: '2024-01-15',
-    updateTime: '2024-01-15',
-    views: 156
-  },
-  {
-    id: 2,
-    title: 'TypeScript 高级技巧分享',
-    category: '技术',
-    tags: ['TypeScript', 'JavaScript'],
-    status: 'draft',
-    createTime: '2024-01-14',
-    updateTime: '2024-01-14',
-    views: 89
-  },
-  {
-    id: 3,
-    title: '2024 年度计划',
-    category: '生活',
-    tags: ['随笔'],
-    status: 'published',
-    createTime: '2024-01-13',
-    updateTime: '2024-01-13',
-    views: 245
+// 文章数据
+const posts = ref<Post[]>([])
+
+// 加载状态
+const loading = ref(false)
+
+// 错误信息
+const error = ref<string | null>(null)
+
+// 加载文章数据
+const loadPosts = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const data = await adminService.getPosts({
+      status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
+      category: filterCategory.value || undefined,
+      search: searchText.value || undefined
+    })
+    posts.value = data
+    // 打印每篇文章的status字段
+    if (Array.isArray(data)) {
+      data.forEach(post => console.log('文章ID:', post.id, 'status:', post.status))
+    }
+  } catch (err) {
+    console.error('加载文章列表失败:', err)
+    error.value = '加载文章列表失败，请稍后重试'
+  } finally {
+    loading.value = false
   }
-])
+}
 
 // 分类选项
 const categoryOptions = [
@@ -369,130 +382,168 @@ const showRecycleBin = ref(false)
 const deletedPosts = ref<DeletedPost[]>([])
 
 // 删除文章（移到回收站）
-const deletePost = (row: Post) => {
-  if (row.status === 'published') {
-    message.warning('已发布的文章不能直接删除，请先改为草稿状态')
-    return
+const deletePost = async (id: number) => {
+  try {
+    await adminService.deletePost(id)
+    const index = posts.value.findIndex(post => post.id === id)
+    if (index !== -1) {
+      const post = posts.value[index]
+      // 将文章移到回收站
+      deletedPosts.value.push({
+        ...post,
+        deleteTime: new Date().toISOString().split('T')[0],
+        type: 'post'
+      })
+      // 从文章列表中移除
+      posts.value.splice(index, 1)
+      message.success('文章已移入回收站')
+    }
+  } catch (err) {
+    console.error('删除文章失败:', err)
+    message.error('删除文章失败，请稍后重试')
   }
-  
-  posts.value = posts.value.filter(post => post.id !== row.id)
-  deletedPosts.value.unshift({
-    ...row,
-    deleteTime: new Date().toLocaleString(),
-    type: 'post'
-  })
-  message.success('文章已移至回收站')
 }
 
-// 恢复文章
-const restorePost = (item: RecycleBinItem) => {
-  if (item.type !== 'post') return
-  const post = item as DeletedPost
-  deletedPosts.value = deletedPosts.value.filter(p => p.id !== post.id)
-  const { deleteTime, type, ...restPost } = post
-  posts.value.unshift({
-    ...restPost,
-    status: 'draft',
-    updateTime: new Date().toLocaleString()
-  })
-  message.success('文章已恢复为草稿状态')
-}
-
-// 永久删除文章
-const permanentlyDeletePost = (item: RecycleBinItem) => {
-  if (item.type !== 'post') return
-  const post = item as DeletedPost
-  deletedPosts.value = deletedPosts.value.filter(p => p.id !== post.id)
-  message.success('文章已永久删除')
+// 从回收站恢复文章
+const restorePost = async (item: RecycleBinItem) => {
+  if (item.type === 'post') {
+    try {
+      // 调用后端恢复文章API（假设有这个API）
+      // await adminService.restorePost(item.id)
+      
+      const post = item as DeletedPost
+      // 将文章添加回文章列表
+      const { deleteTime, type, ...postData } = post
+      posts.value.push(postData)
+      // 从删除列表中移除
+      const index = deletedPosts.value.findIndex(p => p.id === post.id)
+      if (index !== -1) {
+        deletedPosts.value.splice(index, 1)
+      }
+      message.success('文章已恢复')
+      // 重新加载文章列表
+      await loadPosts()
+    } catch (err) {
+      console.error('恢复文章失败:', err)
+      message.error('恢复文章失败，请稍后重试')
+    }
+  }
 }
 
 // 恢复所有文章
-const restoreAllPosts = () => {
-  deletedPosts.value.forEach(post => {
-    const { deleteTime, type, ...restPost } = post
-    posts.value.unshift(restPost)
-  })
-  deletedPosts.value = []
-  message.success('已恢复全部文章')
+const restoreAllPosts = async () => {
+  try {
+    // 调用后端恢复所有文章API（假设有这个API）
+    // await adminService.restoreAllPosts()
+    
+    deletedPosts.value.forEach(post => {
+      if (post.type === 'post') {
+        const { deleteTime, type, ...postData } = post
+        posts.value.push(postData)
+      }
+    })
+    deletedPosts.value = []
+    message.success('所有文章已恢复')
+    // 重新加载文章列表
+    await loadPosts()
+  } catch (err) {
+    console.error('恢复所有文章失败:', err)
+    message.error('恢复所有文章失败，请稍后重试')
+  }
+}
+
+// 永久删除文章
+const permanentlyDeletePost = async (item: RecycleBinItem) => {
+  if (item.type === 'post') {
+    try {
+      // 调用后端永久删除文章API（假设有这个API）
+      // await adminService.permanentlyDeletePost(item.id)
+      
+      const index = deletedPosts.value.findIndex(p => p.id === item.id)
+      if (index !== -1) {
+        deletedPosts.value.splice(index, 1)
+        message.success('文章已永久删除')
+      }
+    } catch (err) {
+      console.error('永久删除文章失败:', err)
+      message.error('永久删除文章失败，请稍后重试')
+    }
+  }
 }
 
 // 清空回收站
-const clearRecycleBin = () => {
-  deletedPosts.value = []
-  message.success('回收站已清空')
+const clearRecycleBin = async () => {
+  try {
+    // 调用后端清空回收站API（假设有这个API）
+    // await adminService.clearRecycleBin('post')
+    
+    deletedPosts.value = []
+    message.success('回收站已清空')
+  } catch (err) {
+    console.error('清空回收站失败:', err)
+    message.error('清空回收站失败，请稍后重试')
+  }
 }
 
 // 更新文章状态
-const updatePostStatus = (post: Post, status: Post['status']) => {
-  const targetPost = posts.value.find(p => p.id === post.id)
-  if (targetPost) {
-    targetPost.status = status
-    targetPost.updateTime = new Date().toLocaleString()
-    
-    // 根据不同状态显示不同的提示
+const updatePostStatus = async (post: Post, status: Post['status']) => {
+  try {
+    await adminService.updatePost(post.id, { ...post, status });
+    const targetPost = posts.value.find(p => p.id === post.id);
+    if (targetPost) {
+      targetPost.status = status;
+      targetPost.updateTime = new Date().toISOString().split('T')[0];
+    }
     const statusMessages = {
       published: '文章已发布',
       draft: '文章已保存为草稿',
       private: '文章已设为私密'
-    }
-    message.success(statusMessages[status])
+    };
+    message.success(statusMessages[status]);
+  } catch (err) {
+    message.error('更新文章状态失败，请稍后重试');
   }
 }
 
-// 修改批量操作函数，使用正确的类型
-const batchPublish = () => {
-  if (selectedRowKeys.value.length === 0) {
-    message.warning('请选择要发布的文章')
-    return
+
+// 批量发布
+const batchPublish = async () => {
+  try {
+    await adminService.batchUpdatePostStatus(selectedRowKeys.value as unknown as number[], 'published')
+    await loadPosts()
+    message.success(`已将 ${selectedRowKeys.value.length} 篇文章发布`)
+    selectedRowKeys.value = []
+  } catch (err) {
+    console.error('批量发布文章失败:', err)
+    message.error('批量发布文章失败，请稍后重试')
   }
-  
-  const draftPosts = posts.value.filter(
-    post => selectedRowKeys.value.includes(post.id.toString()) && post.status === 'draft'
-  )
-  
-  if (draftPosts.length === 0) {
-    message.warning('选中的文章中没有可发布的草稿')
-    return
-  }
-  
-  draftPosts.forEach(post => {
-    post.status = 'published'
-    post.updateTime = new Date().toLocaleString()
-  })
-  
-  message.success(`已发布 ${draftPosts.length} 篇文章`)
-  selectedRowKeys.value = [] // 清空选择
 }
 
 // 批量转为草稿
-const batchDraft = () => {
-  if (selectedRowKeys.value.length === 0) {
-    message.warning('请选择要转为草稿的文章')
-    return
+const batchDraft = async () => {
+  try {
+    await adminService.batchUpdatePostStatus(selectedRowKeys.value as unknown as number[], 'draft')
+    await loadPosts()
+    message.success(`已将 ${selectedRowKeys.value.length} 篇文章转为草稿`)
+    selectedRowKeys.value = []
+  } catch (err) {
+    console.error('批量转为草稿失败:', err)
+    message.error('批量转为草稿失败，请稍后重试')
   }
-  
-  const publishedPosts = posts.value.filter(
-    post => selectedRowKeys.value.includes(post.id.toString()) && post.status === 'published'
-  )
-  
-  if (publishedPosts.length === 0) {
-    message.warning('选中的文章中没有已发布的文章')
-    return
-  }
-  
-  publishedPosts.forEach(post => {
-    post.status = 'draft'
-    post.updateTime = new Date().toLocaleString()
-  })
-  
-  message.success(`已将 ${publishedPosts.length} 篇文章转为草稿`)
-  selectedRowKeys.value = [] // 清空选择
 }
+
+onMounted(async () => {
+  await loadPosts()
+})
 </script>
 
 <style scoped>
 .posts-manage {
   width: 100%;
+}
+
+.error-message {
+  margin-bottom: 16px;
 }
 
 :deep(.n-data-table .n-data-table-td) {

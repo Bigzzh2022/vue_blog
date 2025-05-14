@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { settingsService } from '@/services/settingsService'
 
 interface BasicSettings {
   siteTitle: string
@@ -104,40 +105,44 @@ export const useSettingsStore = defineStore('settings', {
   
   actions: {
     // 获取基本设置
-    getBasicSettings(): BasicSettings {
-      // 未来可以从本地存储或后端加载设置
+    async getBasicSettings(): Promise<BasicSettings> {
+      const settings = await settingsService.getBasicSettings()
+      this.basicSettings = { ...this.basicSettings, ...settings }
       return this.basicSettings
     },
     
     // 保存基本设置
-    saveBasicSettings(settings: Partial<BasicSettings>) {
-      this.basicSettings = { ...this.basicSettings, ...settings }
-      // 未来可以保存到本地存储或后端
-      localStorage.setItem('basicSettings', JSON.stringify(this.basicSettings))
+    async saveBasicSettings(settings: Partial<BasicSettings>) {
+      const updated = await settingsService.saveBasicSettings(settings)
+      this.basicSettings = { ...this.basicSettings, ...updated }
       return true
     },
     
     // 获取个人资料设置
-    getProfileSettings(): ProfileSettings {
+    async getProfileSettings(): Promise<ProfileSettings> {
+      const settings = await settingsService.getProfileSettings()
+      this.profileSettings = { ...this.profileSettings, ...settings }
       return this.profileSettings
     },
     
     // 保存个人资料设置
-    saveProfileSettings(settings: Partial<ProfileSettings>) {
-      this.profileSettings = { ...this.profileSettings, ...settings }
-      localStorage.setItem('profileSettings', JSON.stringify(this.profileSettings))
+    async saveProfileSettings(settings: Partial<ProfileSettings>) {
+      const updated = await settingsService.saveProfileSettings(settings)
+      this.profileSettings = { ...this.profileSettings, ...updated }
       return true
     },
     
     // 获取高级设置
-    getAdvancedSettings(): AdvancedSettings {
+    async getAdvancedSettings(): Promise<AdvancedSettings> {
+      const settings = await settingsService.getAdvancedSettings()
+      this.advancedSettings = { ...this.advancedSettings, ...settings }
       return this.advancedSettings
     },
     
     // 保存高级设置
-    saveAdvancedSettings(settings: Partial<AdvancedSettings>) {
-      this.advancedSettings = { ...this.advancedSettings, ...settings }
-      localStorage.setItem('advancedSettings', JSON.stringify(this.advancedSettings))
+    async saveAdvancedSettings(settings: Partial<AdvancedSettings>) {
+      const updated = await settingsService.saveAdvancedSettings(settings)
+      this.advancedSettings = { ...this.advancedSettings, ...updated }
       return true
     },
     
